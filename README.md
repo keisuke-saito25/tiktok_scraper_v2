@@ -1,12 +1,5 @@
 # tiktok_scraper
 
-## Requirements
-
-- **Python**: 3.6以上
-- **Python Packages**:
-  - `et_xmlfile==2.0.0`
-  - `openpyxl==3.1.5`
-
 ## Installation
 
 1. **リポジトリのクローン**
