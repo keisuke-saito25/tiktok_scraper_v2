@@ -4,7 +4,8 @@ import os
 import config
 import time
 import random
-from modules.excel_utils import read_urls, update_ugc_sheet, update_difference_sheet
+import openpyxl
+from modules.excel_utils import read_urls, update_difference_entry, update_ugc_entry
 from modules.scraper import get_ugc_count, initialize_driver
 from modules.logger import setup_logging
 from selenium.common.exceptions import WebDriverException
@@ -15,8 +16,15 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'module
 def main():
     setup_logging()
 
+    # Excelを開く
+    try:
+        workbook = openpyxl.load_workbook(config.EXCEL_FILE_PATH)
+    except Exception as e:
+        logging.error(f"Excelファイルの読み込みに失敗しました: {e}")
+        return
+
     # URLを取得
-    urls = read_urls(config.EXCEL_FILE_PATH)
+    urls = read_urls(workbook)
     if urls:
         logging.info("取得したURL一覧")
         for idx, url in enumerate(urls, start=1):
@@ -37,34 +45,37 @@ def main():
     except WebDriverException as e:
         logging.error(f"WebDriverの初期化中にエラーが発生しました: {e}")
         return
-
-    ugc_counts = []
-
-    # URLからUGC数を取得
     try:
-        for idx, url in enumerate(limited_urls, start=1): # limited_urls
-            logging.info(f"URL {idx} のUGC数取得を開始: {url}")
+        for idx, url in enumerate(limited_urls, start=1):
+            logging.info(f"URL {idx}  のUGC数取得を開始 : {url}")
             try:
                 ugc_count = get_ugc_count(driver, url)
                 logging.info(f"URL {idx} のUGC数: {ugc_count}")
-                ugc_counts.append(ugc_count)
-                time.sleep(random.uniform(1, 3))
             except Exception as e:
                 logging.error(f"URL {idx} のUGC数取得中にエラーが発生しました: {e}")
-                ugc_counts.append("取得失敗")
+                ugc_count = "取得失敗"
 
-        logging.info("全てのURLのUGC数取得が完了しました。")
+            # update sheet
+            try:
+                delta_count = update_ugc_entry(workbook, ugc_count, idx)
+                update_difference_entry(workbook, delta_count, idx)
+            except Exception as e:
+                logging.error(f"URL {idx} のExcel更新中にエラーが発生しました: {e}")
+
+            # save 
+            try:
+                workbook.save(config.EXCEL_FILE_PATH)
+                logging.info(f"URL {idx} のデータをExcelに保存しました。")
+            except Exception as e:
+                logging.error(f"Excelファイルの保存中にエラーが発生しました: {e}")
+
+            time.sleep(random.uniform(1, 3))
 
     finally:
-        # WebDriverを終了
         driver.quit()
-        logging.info("WebDriverを終了しました。")
+        logging.info("WebDriverを修了しました。")
+        workbook.close()
 
-    # UGCシートを更新し、delta_countsを取得
-    delta_counts = update_ugc_sheet(config.EXCEL_FILE_PATH, ugc_counts)
-
-    # 増減シートを更新
-    update_difference_sheet(config.EXCEL_FILE_PATH, delta_counts)
 
 if __name__ == "__main__":
     main()

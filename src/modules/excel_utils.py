@@ -1,5 +1,6 @@
 import openpyxl
 import logging
+import config
 from datetime import datetime, timedelta
 from modules.constants import (
     UGC_SHEET_NAME,
@@ -21,12 +22,11 @@ from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import get_column_letter
 
 
-def read_alert_value(file_path):
+def read_alert_value(workbook):
     """
     B1セルからアラートの基準値を読み込む関数
     """
     try:
-        workbook = openpyxl.load_workbook(file_path)
         sheet = workbook.active
         b1_value = sheet[ALERT_CELL].value
 
@@ -46,12 +46,11 @@ def read_alert_value(file_path):
         logging.error(f"エラーが発生しました： {e}")
         return None
 
-def read_urls(file_path):
+def read_urls(workbook):
     """
     ExcelファイルのB4セルから下にあるURLを全て読み取る関数
     """
     try:
-        workbook = openpyxl.load_workbook(file_path)
         sheet = workbook.active
         urls = []
         column = URL_COLUMN
@@ -152,21 +151,20 @@ def check_and_apply_alert(cell_delta, cell_ratio, ratio, alert_value, styles, ro
         apply_style(cell_delta, default_fill, default_font)
         apply_style(cell_ratio, default_fill, default_font)
 
-def update_ugc_sheet(file_path, ugc_counts):
+
+def update_ugc_entry(workbook, ugc, url_index):
     """
-    UGCシートにUGC数を書き込み、増減数と増減率を更新する関数
-    増加がアラート基準値を超えた場合、セルにスタイルを適用する
-    増減数をリストで返す
+    UGCシートに単一のUGC数を書き込み、deltaとratioを更新する関数
+    url_indexはSTART_ROWからの相対位置（1から始まる）
     """
     try:
-        workbook = openpyxl.load_workbook(file_path)
         ugc_sheet = get_sheet(workbook, UGC_SHEET_NAME)
     except ValueError as e:
         logging.error(e)
-        return[]
+        return
 
     # アラート基準値を読み込む
-    alert_value = read_alert_value(file_path)
+    alert_value = read_alert_value(workbook)
     if alert_value is None:
         logging.warning("アラート基準値が設定されていません。")
 
@@ -174,84 +172,105 @@ def update_ugc_sheet(file_path, ugc_counts):
     if is_new:
         logging.info(f"UGCシートに新しい日付の列を追加しました: {today_col}")
 
-    start_row = START_ROW
-    delta_counts = []
+    row = START_ROW + url_index - 1
 
-    # スタイルの定義
-    alert_fill = PatternFill(start_color=ALERT_FILL_COLOR, end_color=ALERT_FILL_COLOR, fill_type="solid")
-    alert_font = Font(bold=True, color=ALERT_FONT_COLOR)
-    default_fill = PatternFill(fill_type=DEFAULT_FILL_TYPE)
-    default_font = Font(bold=False, color=DEFAULT_FONT_COLOR)
-
-    styles = (alert_fill, alert_font, default_fill, default_font)
-
-    for idx, ugc in enumerate(ugc_counts):
-        row = start_row + idx
+    if isinstance(ugc, (int, float)):
         # 当日のUGC数を書き込む
         ugc_sheet.cell(row=row, column=today_col).value = ugc
 
-         # 前日との比較
+        # 前日との比較
         if today_col <= MIN_COL_FOR_COMPARISON:
-            delta = 0
-            ratio = 0
+            delta = None
+            ratio = None
             logging.debug(f"行 {row} の前日データが不足しています。")
         else:
             prev_col = today_col - 1
             prev_ugc = ugc_sheet.cell(row=row, column=prev_col).value
             if prev_ugc is None or not isinstance(prev_ugc, (int, float)):
                 logging.warning(f"行 {row} の前日のUGC数が無効です。")
-                delta = 0
-                ratio = 0
+                delta = None
+                ratio = None
             else:
                 delta = ugc - prev_ugc
                 ratio = (delta / prev_ugc) * 100 if prev_ugc != 0 else 0
 
-        logging.debug(f"行 {row}: delta={delta}, ratio={ratio:.2f}%, alert_value={alert_value}")
-        delta_counts.append(delta)
-
+        logging.debug(f"行 {row}: delta={delta}, ratio={ratio}, alert_value={alert_value}")
 
         # 増減数 (B列) と増減率 (C列) を更新
         cell_delta = ugc_sheet.cell(row=row, column=DELTA_COLUMN)
-        cell_delta.value = delta
-
         cell_ratio = ugc_sheet.cell(row=row, column=RATIO_COLUMN)
-        cell_ratio.value = f"{ratio:.2f}%"
+        
+        if delta is not None:
+            cell_delta.value = delta
+        else:
+            cell_delta.value = None  # 空白にする
 
-        # アラートチェック
-        check_and_apply_alert(cell_delta, cell_ratio, ratio, alert_value, styles, row)
+        if ratio is not None:
+            cell_ratio.value = f"{ratio:.2f}%"
+        else:
+            cell_ratio.value = None  # 空白にする
 
-    # ファイルに保存
-    workbook.save(file_path)
-    logging.info("UGCシートの更新が完了しました。")
+        if delta is not None and ratio is not None:
+            # スタイルの定義
+            alert_fill = PatternFill(start_color=ALERT_FILL_COLOR, end_color=ALERT_FILL_COLOR, fill_type="solid")
+            alert_font = Font(bold=True, color=ALERT_FONT_COLOR)
+            default_fill = PatternFill(fill_type=DEFAULT_FILL_TYPE)
+            default_font = Font(bold=False, color=DEFAULT_FONT_COLOR)
+            styles = (alert_fill, alert_font, default_fill, default_font)
 
-    return delta_counts
+            # アラートチェック
+            check_and_apply_alert(cell_delta, cell_ratio, ratio, alert_value, styles, row)
+        else:
+            # スタイルをデフォルトにリセット
+            default_fill = PatternFill(fill_type=DEFAULT_FILL_TYPE)
+            default_font = Font(bold=False, color=DEFAULT_FONT_COLOR)
+            apply_style(cell_delta, default_fill, default_font)
+            apply_style(cell_ratio, default_fill, default_font)
+        
+        return delta
 
-def update_difference_sheet(file_path, delta_counts):
+    else:
+        # UGC取得失敗の場合
+        ugc_sheet.cell(row=row, column=today_col).value = ugc  # "取得失敗" を設定
+
+        # 増減数 (B列) と増減率 (C列) を空白にする
+        cell_delta = ugc_sheet.cell(row=row, column=DELTA_COLUMN)
+        cell_ratio = ugc_sheet.cell(row=row, column=RATIO_COLUMN)
+        cell_delta.value = None
+        cell_ratio.value = None
+
+        # スタイルをデフォルトにリセット
+        default_fill = PatternFill(fill_type=DEFAULT_FILL_TYPE)
+        default_font = Font(bold=False, color=DEFAULT_FONT_COLOR)
+        apply_style(cell_delta, default_fill, default_font)
+        apply_style(cell_ratio, default_fill, default_font)
+        
+        return None  # delta_count は None
+
+def update_difference_entry(workbook, delta, url_index):
     """
     増減シートに増減数を書き込む関数
+    url_indexはSTART_ROWからの相対位置（1から始まる）
     """
     try:
-        workbook = openpyxl.load_workbook(file_path)
         difference_sheet = get_sheet(workbook, DIFFERENCE_SHEET_NAME)
     except ValueError as e:
         logging.error(e)
-        return[]
-    
+        return
+
     today_str = datetime.now().strftime(DATE_FORMAT)
     today_col, is_new = get_or_create_today_column(difference_sheet)
     if is_new: 
+        difference_sheet.cell(row=HEADER_ROW, column=today_col).value = today_str
         logging.info(f"増減シートに新しい日付の列を追加しました: {today_str}")
-        difference_sheet.cell(row=4, column=today_col).value = today_str
 
-    start_row = START_ROW
+    row = START_ROW + url_index - 1
+    song_name_cell = difference_sheet.cell(row=row, column=1)
+    if not song_name_cell.value:
+        logging.warning(f"行 {row} に曲名が存在しません。")
+        return
 
-    for idx, delta in enumerate(delta_counts):
-        row = start_row + idx
-        song_name_cell = difference_sheet.cell(row=row, column=1)
-        if not song_name_cell.value:
-            logging.warning(f"行 {row} に曲名が存在しません。")
-            continue
+    if delta is not None:
         difference_sheet.cell(row=row, column=today_col).value = delta
-    
-    workbook.save(file_path)
-    logging.info("増減シートの更新が完了しました。")
+    else:
+        difference_sheet.cell(row=row, column=today_col).value = None  # 空白にする
