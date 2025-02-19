@@ -27,13 +27,13 @@ def get_ugc_count(driver, url):
         )
         total_ugc_text = total_ugc_element.text.replace('本の動画', '').replace(',', '').strip()
         total_ugc = parse_number(total_ugc_text)
-        logging.info(f"URL: {url} | UGC数: {total_ugc}")
+        logging.info("URL: %s | 取得したUGC数: %d", url, total_ugc)
         return total_ugc
     except TimeoutException:
-        logging.error(f"URL: {url} | 総UGC数の取得中にタイムアウトしました")
+        logging.error("URL: %s | UGC数の取得がタイムアウトしました。", url)
         return 0
     except Exception as e:
-        logging.error(f"URL: {url} | UGC数の取得中にエラーが発生しました: {e}")
+        logging.error("URL: %s | UGC数の取得中にエラーが発生しました: %s", url, e)
         return 0
 
 def initialize_driver():
@@ -42,4 +42,5 @@ def initialize_driver():
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
+    logging.info("Chrome WebDriverを初期化しました。")
     return driver

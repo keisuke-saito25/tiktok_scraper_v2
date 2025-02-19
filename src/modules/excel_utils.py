@@ -1,6 +1,7 @@
 import openpyxl
 import logging
 import config
+import re
 from datetime import datetime, timedelta
 from modules.constants import (
     UGC_SHEET_NAME,
@@ -21,6 +22,34 @@ from modules.constants import (
 from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import get_column_letter
 
+def read_song_urls(workbook):
+    """
+    ExcelファイルのA列とB列から曲名とURLのマップを読み取る関数
+    """
+    try:
+        sheet = workbook.active
+        song_url_map = {}
+        song_column = 'A'
+        url_column = 'B'
+        header_row = HEADER_ROW
+
+        current_row = START_ROW
+        while True:
+            song_name = sheet[f'{song_column}{current_row}'].value
+            url = sheet[f'{url_column}{current_row}'].value
+            if song_name is None and url is None:
+                break  # 両方が空の場合は終了
+            if song_name and url:
+                song_url_map[song_name] = url
+            else:
+                logging.warning("行 %d に不完全なデータがあります。曲名: %s, URL: %s", current_row, song_name, url)
+            current_row += 1
+
+        return song_url_map
+
+    except Exception as e:
+        logging.error("曲名とURLの読み取り中にエラーが発生しました: %s", e)
+        return {}
 
 def read_alert_value(workbook):
     """
@@ -36,14 +65,14 @@ def read_alert_value(workbook):
 
         try:
             alert_value = float(b1_value)
-            logging.info(f"アラート基準値を {alert_value}% として読み込みました。")
+            logging.info("アラート基準値を %0.2f%% として読み込みました。", alert_value)
             return alert_value
         except ValueError:
-            logging.error(f"B1セルの値が数値ではありません: {b1_value}")
+            logging.error("B1セルの値が数値ではありません: %s", b1_value)
             return None
 
     except Exception as e:
-        logging.error(f"エラーが発生しました： {e}")
+        logging.error("アラート基準値の読み取り中にエラーが発生しました: %s", e)
         return None
 
 def read_urls(workbook):
@@ -57,7 +86,7 @@ def read_urls(workbook):
         header = sheet[f'{column}{HEADER_ROW}'].value
 
         if header != 'URL':
-            logging.warning(f"期待するヘッダー 'URL' がセル {column}{HEADER_ROW} に見つかりません。実際の値: {header}")
+            logging.warning("期待するヘッダー 'URL' がセル %s%d に見つかりません。実際の値: %s", column, HEADER_ROW, header)
             return urls
         
         current_row = HEADER_ROW + 1
@@ -71,7 +100,7 @@ def read_urls(workbook):
         return urls
         
     except Exception as e:
-        logging.error(f"エラーが発生しました: {e}")
+        logging.error("URLの読み取り中にエラーが発生しました: %s", e)
         return []
 
 def get_sheet(workbook, sheet_name):
@@ -81,7 +110,7 @@ def get_sheet(workbook, sheet_name):
     if sheet_name in workbook.sheetnames:
         return workbook[sheet_name]
     else:
-        logging.error(f"シート '{sheet_name}' が存在しません。")
+        logging.error("シート '%s' が存在しません。", sheet_name)
         raise ValueError(f"シート '{sheet_name}' が存在しません。")
 
 def get_or_create_today_column(sheet, header_row=4):
@@ -143,19 +172,48 @@ def check_and_apply_alert(cell_delta, cell_ratio, ratio, alert_value, styles, ro
     """
     alert_fill, alert_font, default_fill, default_font = styles
     if alert_value is not None and ratio >= alert_value:
-        logging.debug(f"アラート条件を満たしました。行: {row}, ratio: {ratio:.2f}% >= {alert_value}%")
+        logging.debug("アラート条件を満たしました。行: %d, ratio: %.2f%% >= %.2f%%", row, ratio, alert_value)
         apply_style(cell_delta, alert_fill, alert_font)
         apply_style(cell_ratio, alert_fill, alert_font)
     else:
-        logging.debug(f"アラート条件を満たしていません。行: {row}, ratio: {ratio:.2f}% < {alert_value}%")
+        logging.debug("アラート条件を満たしていません。行: %d, ratio: %.2f%% < %.2f%%", row, ratio, alert_value)
         apply_style(cell_delta, default_fill, default_font)
         apply_style(cell_ratio, default_fill, default_font)
 
 
-def update_ugc_entry(workbook, ugc, url_index):
+def get_row_by_song(sheet, song_name, workbook):
+    """
+    曲名から対応する行番号を取得する関数。
+    セルが数式の場合、参照先の値を取得して比較します。
+    """
+    for row in range(START_ROW, sheet.max_row + 1):
+        cell = sheet.cell(row=row, column=1)  # A列
+        cell_value = cell.value
+
+        # セルが数式かどうかをチェック
+        if isinstance(cell_value, str) and cell_value.startswith('='):
+            referenced_sheet_name, referenced_cell = parse_formula(cell_value)
+            if referenced_sheet_name and referenced_cell:
+                # 参照先シートが存在するか確認
+                if referenced_sheet_name in workbook.sheetnames:
+                    referenced_sheet = workbook[referenced_sheet_name]
+                    referenced_value = referenced_sheet[referenced_cell].value
+                    if referenced_value == song_name:
+                        return row
+                else:
+                    logging.warning("参照先シート '%s' が存在しません。", referenced_sheet_name)
+        else:
+            # セルが数式でない場合の通常の比較
+            if cell_value == song_name:
+                return row
+
+    logging.warning("曲名 '%s' に対応する行が見つかりません。", song_name)
+    return None
+
+def update_ugc_entry(workbook, ugc, row):
     """
     UGCシートに単一のUGC数を書き込み、deltaとratioを更新する関数
-    url_indexはSTART_ROWからの相対位置（1から始まる）
+    rowはシート内の行番号
     """
     try:
         ugc_sheet = get_sheet(workbook, UGC_SHEET_NAME)
@@ -170,9 +228,7 @@ def update_ugc_entry(workbook, ugc, url_index):
 
     today_col, is_new = get_or_create_today_column(ugc_sheet)
     if is_new:
-        logging.info(f"UGCシートに新しい日付の列を追加しました: {today_col}")
-
-    row = START_ROW + url_index - 1
+        logging.info("UGCシートに新しい日付の列を追加しました。列番号: %d", today_col)
 
     if isinstance(ugc, (int, float)):
         # 当日のUGC数を書き込む
@@ -182,19 +238,19 @@ def update_ugc_entry(workbook, ugc, url_index):
         if today_col <= MIN_COL_FOR_COMPARISON:
             delta = None
             ratio = None
-            logging.debug(f"行 {row} の前日データが不足しています。")
+            logging.debug("行 %d の前日データが不足しています。", row)
         else:
             prev_col = today_col - 1
             prev_ugc = ugc_sheet.cell(row=row, column=prev_col).value
             if prev_ugc is None or not isinstance(prev_ugc, (int, float)):
-                logging.warning(f"行 {row} の前日のUGC数が無効です。")
+                logging.warning("行 %d の前日のUGC数が無効です。", row)
                 delta = None
                 ratio = None
             else:
                 delta = ugc - prev_ugc
                 ratio = (delta / prev_ugc) * 100 if prev_ugc != 0 else 0
 
-        logging.debug(f"行 {row}: delta={delta}, ratio={ratio}, alert_value={alert_value}")
+        logging.debug("行 %d: delta=%s, ratio=%s%%, alert_value=%s%%", row, delta, ratio, alert_value)
 
         # 増減数 (B列) と増減率 (C列) を更新
         cell_delta = ugc_sheet.cell(row=row, column=DELTA_COLUMN)
@@ -247,10 +303,10 @@ def update_ugc_entry(workbook, ugc, url_index):
         
         return None  # delta_count は None
 
-def update_difference_entry(workbook, delta, url_index):
+def update_difference_entry(workbook, delta, row):
     """
     増減シートに増減数を書き込む関数
-    url_indexはSTART_ROWからの相対位置（1から始まる）
+    rowはシート内の行番号
     """
     try:
         difference_sheet = get_sheet(workbook, DIFFERENCE_SHEET_NAME)
@@ -262,15 +318,113 @@ def update_difference_entry(workbook, delta, url_index):
     today_col, is_new = get_or_create_today_column(difference_sheet)
     if is_new: 
         difference_sheet.cell(row=HEADER_ROW, column=today_col).value = today_str
-        logging.info(f"増減シートに新しい日付の列を追加しました: {today_str}")
+        logging.info("増減シートに新しい日付の列を追加しました: %s", today_str)
 
-    row = START_ROW + url_index - 1
-    song_name_cell = difference_sheet.cell(row=row, column=1)
-    if not song_name_cell.value:
-        logging.warning(f"行 {row} に曲名が存在しません。")
+    song_name = difference_sheet.cell(row=row, column=1).value
+    if not song_name:
+        logging.warning("行 %d に曲名が存在しません。", row)
         return
-
+    
     if delta is not None:
         difference_sheet.cell(row=row, column=today_col).value = delta
     else:
         difference_sheet.cell(row=row, column=today_col).value = None  # 空白にする
+
+def find_failed_entries(workbook):
+    """
+    UGCシートから最新の日付列に '取得失敗' とマークされている行を取得する関数
+    """
+    ugc_sheet = workbook[UGC_SHEET_NAME]
+    
+    # ヘッダー行から最新の日付列を特定
+    header_cells = ugc_sheet[HEADER_ROW]
+    date_columns = []
+    for cell in header_cells:
+        if cell.value and isinstance(cell.value, str):
+            try:
+                datetime.strptime(cell.value, DATE_FORMAT)
+                date_columns.append(cell.column)
+            except ValueError:
+                continue  # 日付でない場合はスキップ
+    
+    if not date_columns:
+        logging.error("UGCシートに有効な日付列が見つかりません。")
+        return []
+    
+    latest_date_col = max(date_columns)  # 最も右側の列が最新の日付
+    latest_date_str = ugc_sheet.cell(row=HEADER_ROW, column=latest_date_col).value
+    logging.info("最新の日付列を特定しました: %s (列番号: %d)", latest_date_str, latest_date_col)
+    
+    failed_entries = []
+    
+    # URLシートの読み込み
+    try:
+        url_sheet = get_sheet(workbook, '楽曲マスタ') 
+    except ValueError as e:
+        logging.error(e)
+        return []
+    
+    for row in range(START_ROW, ugc_sheet.max_row + 1):
+        status = ugc_sheet.cell(row=row, column=latest_date_col).value
+        if status == "取得失敗":
+            cell = ugc_sheet.cell(row=row, column=1)  # A列
+            song_name = None
+
+            if isinstance(cell.value, str) and cell.value.startswith('='):
+                # 数式の場合、参照先の値を取得
+                referenced_sheet_name, referenced_cell = parse_formula(cell.value)
+                if referenced_sheet_name and referenced_cell:
+                    if referenced_sheet_name in workbook.sheetnames:
+                        referenced_sheet = workbook[referenced_sheet_name]
+                        song_name = referenced_sheet[referenced_cell].value
+                        logging.debug("数式から取得した曲名: %s", song_name)
+                    else:
+                        logging.warning("参照先シート '%s' が存在しません。", referenced_sheet_name)
+            else:
+                # 通常の値の場合
+                song_name = cell.value
+
+            if not song_name:
+                logging.warning("行 %d の曲名が取得できませんでした。", row)
+                continue
+
+            # URLシートから曲名に対応するURLを検索
+            url = find_url_by_song_name(url_sheet, song_name)
+            if url:
+                failed_entries.append({
+                    'row': row,
+                    'song': song_name,
+                    'url': url
+                })
+                logging.info("再試行対象 - 行: %d, 曲名: %s, URL: %s", row, song_name, url)
+            else:
+                logging.warning("曲名 '%s' に対応するURLが見つかりません。", song_name)
+    
+    return failed_entries
+
+def parse_formula(formula):
+    """
+    数式から参照先シート名とセルアドレスを抽出する関数
+    例: "= '楽曲マスタ'!A6" -> ('楽曲マスタ', 'A6')
+    """
+    import re
+    pattern = re.compile(r"='?([^'!]+)'?!([A-Z]+[0-9]+)")
+    match = pattern.match(formula)
+    if match:
+        referenced_sheet = match.group(1)
+        referenced_cell = match.group(2)
+        return referenced_sheet, referenced_cell
+    else:
+        logging.warning("予期しない数式形式: %s", formula)
+        return None, None
+
+def find_url_by_song_name(url_sheet, song_name):
+    """
+    URLシートから曲名に対応するURLを検索する関数
+    """
+    for row in range(START_ROW, url_sheet.max_row + 1):
+        cell_song = url_sheet.cell(row=row, column=1).value  # A列
+        cell_url = url_sheet.cell(row=row, column=2).value   # B列
+        if cell_song == song_name:
+            return cell_url
+    return None

@@ -8,6 +8,7 @@ def setup_logging():
     log_dir = os.path.dirname(config.LOG_FILE_PATH)
     if log_dir and not os.path.exists(log_dir):
         os.makedirs(log_dir)
+        logging.debug("ログディレクトリを作成しました: %s", log_dir)
     
     logging.basicConfig(
         level=logging.INFO,
@@ -18,3 +19,4 @@ def setup_logging():
             logging.StreamHandler(sys.stdout)
         ]
     )
+    logging.info("ログ設定が完了しました。ログファイル: %s", config.LOG_FILE_PATH)

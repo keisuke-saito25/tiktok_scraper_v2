@@ -12,7 +12,7 @@ def parse_number(text):
     """
     match = re.match(r'^([\d,.]+)([KMB]?)$', text.strip(), re.IGNORECASE)
     if not match:
-        logging.warning(f"数値として解析できないテキスト: '{text}'")
+        logging.warning("数値として解析できませんでした: '%s'", text)
         return 0
     number, suffix = match.groups()
     number = number.replace(',', '').replace('.', '')
@@ -22,5 +22,5 @@ def parse_number(text):
             value *= MULTIPLIERS[suffix.upper()]
         return int(value)
     except ValueError:
-        logging.error(f"数値変換エラー: '{text}'")
+        logging.error("数値変換エラー: '%s'", text)
         return 0

@@ -33,5 +33,5 @@ DATE_FORMAT: str = '%Y-%m-%d'
 MULTIPLIERS: Dict[str, int] = {'K': 1_000, 'M': 1_000_000, 'B': 1_000_000_000}
 
 # logger.py
-LOG_FORMAT: str = '%(asctime)s [%(levelname)s] %(message)s'
+LOG_FORMAT: str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 LOG_DATE_FORMAT: str = '%Y-%m-%d %H:%M:%S'
