@@ -1,6 +1,6 @@
-# tiktok_scraper
+# tiktok_ugc_scraper
 
-## Installation
+## インストール
 
 1. **リポジトリのクローン**
 
@@ -26,13 +26,35 @@
    ```bash
    pip install -r requirements.txt
    ```
+## 実行方法
 
-## Configuration
+- **通常**
 
-プロジェクトルートにある `config.py` ファイルを編集して、必要なパスを設定します。
+    ```bash
+    python3 src/main.py process
+    ```
 
-```python
-# config.py
-EXCEL_FILE_PATH  = "scraping.xlsx"
-LOG_FILE_PATH = "logs/scraper.log"
-```
+- **失敗レコードのみリトライ**
+
+    ```bash
+    python3 src/main.py retry
+
+## ビルド方法
+
+PyInstallerを使用
+
+- **通常**
+
+    ```bash
+    pyinstaller --onefile --name tiktok_scraper_process \
+    --add-data="src/modules/*:modules" \
+    src/process_runner.py
+    ```
+
+- **失敗レコードのみリトライ**
+
+    ```bash
+    pyinstaller --onefile --name tiktok_scraper_retry \
+    --add-data="src/modules/*:modules" \
+    src/retry_runner.py
+    ```
