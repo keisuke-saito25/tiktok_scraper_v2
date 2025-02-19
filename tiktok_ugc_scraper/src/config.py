@@ -40,7 +40,7 @@ def load_config():
 try:
     config_data = load_config()
     EXCEL_FILE_PATH = config_data["EXCEL_FILE_PATH"]
-    LOG_FILE_PATH = config_data["LOG_FILE_PATH"]
+    LOG_FILE_PATH = resource_path(config_data["LOG_FILE_PATH"])
 except Exception as e:
     logging.basicConfig(level=logging.ERROR)
     logging.error(f"設定のロードに失敗しました: {e}")
