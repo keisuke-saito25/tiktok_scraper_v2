@@ -152,11 +152,11 @@ const handleFile = (event: Event) => {
       console.log('楽曲情報シートのExcelデータ:', extractedData['楽曲情報'])
 
       // 楽曲情報の整形
-      const rawData = extractedData['楽曲情報'] as any[][]
+      const rawSongInfoData = extractedData['楽曲情報'] as any[][]
 
-      if (rawData.length > 1) {
-        const headers = rawData[0]
-        const data = rawData.slice(1)
+      if (rawSongInfoData.length > 1) {
+        const headers = rawSongInfoData[0]
+        const data = rawSongInfoData.slice(1)
           // 完全に空の行をフィルタリング
           .filter(row => !isRowEmpty(row))
           .map((row, rowIndex) => {
@@ -181,6 +181,37 @@ const handleFile = (event: Event) => {
         // 日付が存在し、有効なデータのみをフィルタリング
         songInfoData.value = data.filter(item => item.日付 && !isNaN(new Date(item.日付).getTime()))
       }
+
+      // ---------------------------
+      // フォロワー数シートの処理開始
+      // ---------------------------
+      const rawFollowerData = extractedData[formattedSheetName.value] as any[][]
+
+      if (rawFollowerData.length > 1) {
+        const followerHeaders = rawFollowerData[0]
+        const followerRows = rawFollowerData.slice(1)
+          .filter(row => !isRowEmpty(row))
+          .map((row, rowIndex) => {
+            const rowData: Record<string, any> = {}
+            followerHeaders.forEach((header, index) => {
+              rowData[header] = row[index]
+            })
+            return rowData
+          })
+
+        // `フォロワー数` が数値であることを確認し、ソート
+        const top30Followers = followerRows
+          .filter(item => typeof item.フォロワー数 === 'number')
+          .sort((a, b) => b.フォロワー数 - a.フォロワー数)
+          .slice(0, 30)
+
+        // トップ30をコンソールに出力
+        console.log('フォロワー数トップ30:', top30Followers)
+      }
+      // ---------------------------
+      // フォロワー数シートの処理終了
+      // ---------------------------
+
     } catch (error) {
       console.error('ファイルの解析中にエラーが発生しました:', error)
       showError('ファイルの解析中にエラーが発生しました。')
@@ -188,7 +219,6 @@ const handleFile = (event: Event) => {
       // ファイル入力をリセット
       resetFileInput()
     }
-
   }
   reader.readAsArrayBuffer(file)
 }
