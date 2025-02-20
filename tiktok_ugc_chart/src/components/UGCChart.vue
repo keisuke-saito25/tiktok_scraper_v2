@@ -24,9 +24,18 @@
   let chart: Chart | null = null
   
   const formatData = (data: SongInfo[]) => {
-    const labels = data.map(item => {
+    const labels = data.map((item, index) => {
+      if (!item.日付) {
+        console.warn(`データの項目 ${index + 1} に日付が欠けています:`, item)
+        return '不明'
+      }
+  
       if (typeof item.日付 === 'string') {
         const date = new Date(item.日付)
+        if (isNaN(date.getTime())) {
+          console.warn(`データの項目 ${index + 1} に無効な日付形式があります:`, item.日付)
+          return '無効な日付'
+        }
         // 日付をフォーマット
         return `${date.getFullYear()}/${(date.getMonth()+1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`
       }
