@@ -24,14 +24,14 @@
     フォロワー数: number;
     動画リンク_URL: string;
     更新日: string;
-    アイコンURL: string;
+    アイコン: string;
   }
 
   Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend)
   
   const props = defineProps<{
     data: SongInfo[]
-    top30FollowerPost: TikTokPost[]
+    // top30FollowerPost: TikTokPost[]
   }>()
   
   const canvas = ref<HTMLCanvasElement | null>(null)
@@ -60,7 +60,7 @@
   }
   
   const renderChart = () => {
-    console.log("props.top30FollowerPost: ", props.top30FollowerPost)
+    // console.log("props.top30FollowerPost: ", props.top30FollowerPost)
     console.log("props.data: ", props.data)
 
     if (canvas.value) {

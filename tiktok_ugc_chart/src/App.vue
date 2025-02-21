@@ -2,32 +2,41 @@
   <v-app>
     <v-main>
       <v-container>
-        <!-- 日付選択とExcel読み込み -->
+        <!-- Excel読み込みボタンと日付フィルタ -->
         <v-row align="center" justify="start" class="my-4" spacing="4">
-          <!-- 日付選択 -->
-          <v-col cols="12" sm="6" md="4">
-            <v-text-field
-              v-model="selectedDate"
-              label="シートの日付を選択"
-              prepend-icon="mdi-calendar"
-              readonly
-              @click="menu = true"
-            ></v-text-field>
-            <v-menu
-              v-model="menu"
-              :close-on-content-click="false"
-              transition="scale-transition"
-              offset-y
-            >
-              <v-date-picker v-model="selectedDate" @input="menu = false"></v-date-picker>
-            </v-menu>
-          </v-col>
-
-          <!-- Excel読み込みボタン -->
           <v-col cols="12" sm="6" md="3">
-            <v-btn color="primary" @click="triggerFileInput" :disabled="!selectedDate" block>
+            <v-btn
+              color="primary"
+              @click="triggerFileInput"
+              block
+              :disabled="!isFilterValid"
+            >
               Excelを読み込む
             </v-btn>
+          </v-col>
+
+          <!-- From-Toフィルタ -->
+          <v-col cols="12" sm="6" md="3">
+            <v-text-field
+              label="From"
+              type="date"
+              v-model="filterFrom"
+              outlined
+              dense
+              :rules="fromRules"
+              required
+            ></v-text-field>
+          </v-col>
+          <v-col cols="12" sm="6" md="3">
+            <v-text-field
+              label="To"
+              type="date"
+              v-model="filterTo"
+              outlined
+              dense
+              :rules="toRules"
+              required
+            ></v-text-field>
           </v-col>
         </v-row>
 
@@ -43,7 +52,7 @@
         <!-- グラフ表示 -->
         <v-row>
           <v-col cols="12">
-            <UGCChart :data="songInfoData" :top30FollowerPost="top30FollowerPost" v-if="songInfoData.length > 0" />
+            <UGCChart :data="filteredSongInfoData" v-if="filteredSongInfoData.length > 0" />
           </v-col>
         </v-row>
       </v-container>
@@ -60,33 +69,48 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import * as XLSX from 'xlsx'
 import UGCChart from './components/UGCChart.vue'
 
+// 型定義を追加
+interface SongInfo {
+  楽曲名: string
+  楽曲URL: string
+  日付: string | number
+  総UGC数: number
+}
+
 const fileInput = ref<HTMLInputElement | null>(null)
-const selectedDate = ref<string | Date | null>(null)
-const menu = ref(false)
-const songInfoData = ref<any[]>([])
-const top30FollowerPost = ref<any[]>([])
+const songInfoData = ref<SongInfo[]>([])
+
+// フィルタ用のFrom-To
+const filterFrom = ref<string>('')
+const filterTo = ref<string>('')
+
+// バリデーションルール
+const required = (value: string) => !!value || '必須項目です。'
+const isValidDate = (dateStr: string): boolean => {
+  const date = new Date(dateStr)
+  return !isNaN(date.getTime())
+}
+const validDate = (value: string) => isValidDate(value) || '有効な日付を入力してください。'
+
+// FromがToより前または同じであることを確認するルール
+const fromBeforeTo = () => {
+  if (filterFrom.value && filterTo.value) {
+    return new Date(filterFrom.value) <= new Date(filterTo.value) || 'Fromの日付はToより前または同じでなければなりません。'
+  }
+  return true
+}
+
+// FromとToのルールを配列として定義
+const fromRules = [required, validDate, fromBeforeTo]
+const toRules = [required, validDate, fromBeforeTo]
 
 // Snackbar state
 const snackbar = ref(false)
 const snackbarMessage = ref('')
-
-// 日付を "YYYYMMDD" にフォーマット
-const formattedSheetName = computed((): string => {
-  if (typeof selectedDate.value === 'string') {
-    return selectedDate.value.replace(/-/g, '')
-  } else if (selectedDate.value instanceof Date) {
-    const pad = (num: number) => num.toString().padStart(2, '0')
-    const year = selectedDate.value.getFullYear()
-    const month = pad(selectedDate.value.getMonth() + 1)
-    const day = pad(selectedDate.value.getDate())
-    return `${year}${month}${day}`
-  }
-  return ''
-})
 
 // ファイル入力をトリガー
 const triggerFileInput = () => {
@@ -100,7 +124,7 @@ const showError = (message: string) => {
 }
 
 // 行が完全に空かどうかを確認
-const isRowEmpty = (row: any[]) => {
+const isRowEmpty = (row: any[]): boolean => {
   return row.every(cell => cell == null || cell === '')
 }
 
@@ -122,50 +146,34 @@ const handleFile = (event: Event) => {
     return
   }
 
-  if (!formattedSheetName.value) {
-    showError('日付を選択してください。')
-    resetFileInput()
-    return
-  }
-
   const reader = new FileReader()
   reader.onload = (e) => {
     try {
       const data = new Uint8Array(e.target?.result as ArrayBuffer)
       const workbook = XLSX.read(data, { type: 'array' })
 
-      const sheetNamesToLoad = [formattedSheetName.value, '楽曲情報']
-      const missingSheets = sheetNamesToLoad.filter(name => !workbook.SheetNames.includes(name))
-
-      if (missingSheets.length > 0) {
-        showError(`以下のシートが見つかりません: ${missingSheets.join(', ')}`)
+      const sheetName = '楽曲情報'
+      if (!workbook.SheetNames.includes(sheetName)) {
+        showError(`シート "${sheetName}" が見つかりません。`)
         return
       }
 
-      const extractedData: Record<string, any[]> = {}
+      const worksheet = workbook.Sheets[sheetName]
+      const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
 
-      sheetNamesToLoad.forEach(sheetName => {
-        const worksheet = workbook.Sheets[sheetName]
-        extractedData[sheetName] = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
-      })
+      console.log(`"${sheetName}" シートのExcelデータ:`, rawData)
 
-      console.log('選択された日付のシートのExcelデータ:', extractedData[formattedSheetName.value])
-      console.log('楽曲情報シートのExcelデータ:', extractedData['楽曲情報'])
-
-      // 楽曲情報の整形
-      const rawSongInfoData = extractedData['楽曲情報'] as any[][]
-
-      if (rawSongInfoData.length > 1) {
-        const headers = rawSongInfoData[0]
-        const data = rawSongInfoData.slice(1)
-          // 完全に空の行をフィルタリング
+      // データの整形
+      if (rawData.length > 1) {
+        const headers: string[] = rawData[0] as string[]
+        const data: SongInfo[] = rawData.slice(1)
           .filter(row => !isRowEmpty(row))
           .map((row, rowIndex) => {
             const rowData: Record<string, any> = {}
             headers.forEach((header, index) => {
               rowData[header] = row[index]
             })
-            return rowData
+            return rowData as SongInfo
           })
 
         // 不正データの検出
@@ -173,46 +181,15 @@ const handleFile = (event: Event) => {
           if (!item.日付) {
             console.warn(`楽曲情報シートの行 ${index + 2} に日付が欠けています:`, item)
             showError(`楽曲情報シートの行 ${index + 2} に日付が欠けています。`)
-          } else if (isNaN(new Date(item.日付).getTime())) {
+          } else if (isNaN(new Date(item.日付 as string).getTime())) {
             console.warn(`楽曲情報シートの行 ${index + 2} に無効な日付形式があります:`, item.日付)
             showError(`楽曲情報シートの行 ${index + 2} に無効な日付形式があります。`)
           }
         })
 
         // 日付が存在し、有効なデータのみをフィルタリング
-        songInfoData.value = data.filter(item => item.日付 && !isNaN(new Date(item.日付).getTime()))
+        songInfoData.value = data.filter(item => item.日付 && !isNaN(new Date(item.日付 as string).getTime()))
       }
-
-      // ---------------------------
-      // フォロワー数の処理開始
-      // ---------------------------
-      const rawFollowerData = extractedData[formattedSheetName.value] as any[][]
-
-      if (rawFollowerData.length > 1) {
-        const followerHeaders = rawFollowerData[0]
-        const followerRows = rawFollowerData.slice(1)
-          .filter(row => !isRowEmpty(row))
-          .map((row, rowIndex) => {
-            const rowData: Record<string, any> = {}
-            followerHeaders.forEach((header, index) => {
-              rowData[header] = row[index]
-            })
-            return rowData
-          })
-
-        // `フォロワー数` が数値であることを確認し、ソート
-        top30FollowerPost.value = followerRows
-          .filter(item => typeof item.フォロワー数 === 'number')
-          .sort((a, b) => b.フォロワー数 - a.フォロワー数)
-          .slice(0, 30)
-
-        // トップ30をコンソールに出力
-        console.log('フォロワー数トップ30:', top30FollowerPost)
-      }
-      // ---------------------------
-      // フォロワー数の処理終了
-      // ---------------------------
-
     } catch (error) {
       console.error('ファイルの解析中にエラーが発生しました:', error)
       showError('ファイルの解析中にエラーが発生しました。')
@@ -223,8 +200,39 @@ const handleFile = (event: Event) => {
   }
   reader.readAsArrayBuffer(file)
 }
+
+// フィルタの有効な日付形式かつFromがToの日付以下
+const isFilterValid = computed(() => {
+  return (
+    isValidDate(filterFrom.value) &&
+    isValidDate(filterTo.value) &&
+    new Date(filterFrom.value) <= new Date(filterTo.value)
+  )
+})
+
+// フィルタリングされたデータ
+const filteredSongInfoData = computed(() => {
+  if (!isFilterValid.value) {
+    return []
+  }
+
+  return songInfoData.value.filter(item => {
+    if (typeof item.日付 !== 'string') return false
+    const itemDate = new Date(item.日付)
+    const fromDate = new Date(filterFrom.value)
+    const toDate = new Date(filterTo.value)
+
+    return itemDate >= fromDate && itemDate <= toDate
+  })
+})
+
+// filteredSongInfoDataがない場合
+watch(filteredSongInfoData, (newData) => {
+  if (isFilterValid.value && newData.length === 0) {
+    showError('指定した期間内にデータがありません。')
+  }
+})
 </script>
 
 <style>
-
 </style>
