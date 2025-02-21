@@ -1,23 +1,3 @@
-<template>
-    <div>
-      <v-btn
-        color="primary"
-        @click="triggerFileInput"
-        block
-        :disabled="disabled"
-      >
-        {{ buttonLabel }}
-      </v-btn>
-      <input
-        type="file"
-        ref="fileInput"
-        @change="onFileChange"
-        :accept="accept"
-        style="display: none"
-      />
-    </div>
-  </template>
-  
   <script setup lang="ts">
   import { ref, defineEmits, defineProps } from 'vue'
   
@@ -61,5 +41,25 @@
   }
   </script>
   
+  <template>
+    <div>
+      <v-btn
+        color="primary"
+        @click="triggerFileInput"
+        block
+        :disabled="disabled"
+      >
+        {{ buttonLabel }}
+      </v-btn>
+      <input
+        type="file"
+        ref="fileInput"
+        @change="onFileChange"
+        :accept="accept"
+        style="display: none"
+      />
+    </div>
+  </template>
+
   <style scoped>
   </style>
