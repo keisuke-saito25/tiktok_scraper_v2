@@ -1,7 +1,4 @@
-<template>
-    <canvas ref="canvas"></canvas>
-  </template>
-  
+
   <script setup lang="ts">
   import { ref, onMounted, watch } from 'vue'
   import { Chart, LineController, LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend } from 'chart.js'
@@ -28,7 +25,7 @@
     動画リンク_URL: string;
     更新日: string;
     アイコンURL: string;
-}
+  }
 
   Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend)
   
@@ -119,6 +116,10 @@
   }, { deep: true })
   </script>
   
+  <template>
+    <canvas ref="canvas"></canvas>
+  </template>
+
   <style scoped>
   canvas {
     max-width: 100%;
