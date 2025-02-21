@@ -256,6 +256,35 @@ const handleFile = (file: File) => {
               })
 
               console.log(`"${toDateStr}" シートの From2-To2 範囲でフィルタリングされたデータ:`, furtherFilteredData)
+
+              // アカウント名で重複を排除し、投稿日が最も古いものを保持
+              const uniqueAccountsMap = new Map<string, TikTokPost>()
+
+              furtherFilteredData.forEach(post => {
+                const accountName = post.アカウント名
+                const postDate = new Date(post.投稿日)
+
+                if (!uniqueAccountsMap.has(accountName)) {
+                  uniqueAccountsMap.set(accountName, post)
+                } else {
+                  const existingPost = uniqueAccountsMap.get(accountName)!
+                  const existingDate = new Date(existingPost.投稿日)
+                  if (postDate < existingDate) {
+                    uniqueAccountsMap.set(accountName, post)
+                  }
+                }
+              })
+
+              const uniqueAccounts = Array.from(uniqueAccountsMap.values())
+              console.log('重複排除後のデータ:', uniqueAccounts)
+
+              // フォロワー数で降順ソートし、トップ30を取得
+              const top30Followers = uniqueAccounts
+                .sort((a, b) => b.フォロワー数 - a.フォロワー数)
+                .slice(0, 30)
+
+              console.log('フォロワー数 TOP 30:', top30Followers)
+
             } else {
               console.log('From2 と To2 のフィルタが設定されていません。')
             }
@@ -293,14 +322,8 @@ const filteredSongInfoData = computed(() => {
     const itemDate = new Date(item.日付)
     const fromDate = new Date(filterFrom.value)
     const toDate = new Date(filterTo.value)
-    const fromDate2 = filterFrom2.value ? new Date(filterFrom2.value) : null
-    const toDate2 = filterTo2.value ? new Date(filterTo2.value) : null
 
-    let valid = itemDate >= fromDate && itemDate <= toDate
-    if (fromDate2 && toDate2) {
-      valid = valid && itemDate >= fromDate2 && itemDate <= toDate2
-    }
-    return valid
+    return itemDate >= fromDate && itemDate <= toDate
   })
 })
 
