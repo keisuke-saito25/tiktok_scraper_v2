@@ -43,7 +43,7 @@
         <!-- グラフ表示 -->
         <v-row>
           <v-col cols="12">
-            <UGCChart :data="songInfoData" v-if="songInfoData.length > 0" />
+            <UGCChart :data="songInfoData" :top30FollowerPost="top30FollowerPost" v-if="songInfoData.length > 0" />
           </v-col>
         </v-row>
       </v-container>
@@ -68,6 +68,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const selectedDate = ref<string | Date | null>(null)
 const menu = ref(false)
 const songInfoData = ref<any[]>([])
+const top30FollowerPost = ref<any[]>([])
 
 // Snackbar state
 const snackbar = ref(false)
@@ -183,7 +184,7 @@ const handleFile = (event: Event) => {
       }
 
       // ---------------------------
-      // フォロワー数シートの処理開始
+      // フォロワー数の処理開始
       // ---------------------------
       const rawFollowerData = extractedData[formattedSheetName.value] as any[][]
 
@@ -200,16 +201,16 @@ const handleFile = (event: Event) => {
           })
 
         // `フォロワー数` が数値であることを確認し、ソート
-        const top30Followers = followerRows
+        top30FollowerPost.value = followerRows
           .filter(item => typeof item.フォロワー数 === 'number')
           .sort((a, b) => b.フォロワー数 - a.フォロワー数)
           .slice(0, 30)
 
         // トップ30をコンソールに出力
-        console.log('フォロワー数トップ30:', top30Followers)
+        console.log('フォロワー数トップ30:', top30FollowerPost)
       }
       // ---------------------------
-      // フォロワー数シートの処理終了
+      // フォロワー数の処理終了
       // ---------------------------
 
     } catch (error) {

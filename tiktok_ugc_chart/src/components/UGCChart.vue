@@ -14,10 +14,27 @@
     総UGC数: number
   }
   
+  interface TikTokPost {
+    投稿ID: string;
+    投稿日: string;
+    アカウント名: string;
+    ニックネーム: string;
+    いいね数: number;
+    コメント数: number;
+    保存数: number;
+    シェア数: number;
+    再生回数: number;
+    フォロワー数: number;
+    動画リンク_URL: string;
+    更新日: string;
+    アイコンURL: string;
+}
+
   Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend)
   
   const props = defineProps<{
     data: SongInfo[]
+    top30FollowerPost: TikTokPost[]
   }>()
   
   const canvas = ref<HTMLCanvasElement | null>(null)
@@ -46,6 +63,9 @@
   }
   
   const renderChart = () => {
+    console.log("props.top30FollowerPost: ", props.top30FollowerPost)
+    console.log("props.data: ", props.data)
+
     if (canvas.value) {
       const { labels, ugcData } = formatData(props.data)
       const chartData: ChartData<'line'> = {
