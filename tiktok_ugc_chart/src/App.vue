@@ -38,6 +38,27 @@
               required
             ></v-text-field>
           </v-col>
+
+          <v-col cols="12" sm="6" md="3">
+            <v-text-field
+              label="From 2"
+              type="date"
+              v-model="filterFrom2"
+              outlined
+              dense
+              :rules="fromRules2"
+            ></v-text-field>
+          </v-col>
+          <v-col cols="12" sm="6" md="3">
+            <v-text-field
+              label="To 2"
+              type="date"
+              v-model="filterTo2"
+              outlined
+              dense
+              disabled
+            ></v-text-field>
+          </v-col>
         </v-row>
 
         <!-- 隠しファイル入力 -->
@@ -73,7 +94,7 @@ import { ref, computed, watch } from 'vue'
 import * as XLSX from 'xlsx'
 import UGCChart from './components/UGCChart.vue'
 
-// 型定義を追加
+// 型定義
 interface SongInfo {
   楽曲名: string
   楽曲URL: string
@@ -87,6 +108,10 @@ const songInfoData = ref<SongInfo[]>([])
 // フィルタ用のFrom-To
 const filterFrom = ref<string>('')
 const filterTo = ref<string>('')
+
+// 新しいフィルタ用のFrom-To
+const filterFrom2 = ref<string>('')
+const filterTo2 = computed(() => filterTo.value) // To 2 は To と同じ値
 
 // バリデーションルール
 const required = (value: string) => !!value || '必須項目です。'
@@ -104,9 +129,25 @@ const fromBeforeTo = () => {
   return true
 }
 
-// FromとToのルールを配列として定義
+// FromとToのルールを配列
 const fromRules = [required, validDate, fromBeforeTo]
 const toRules = [required, validDate, fromBeforeTo]
+
+// From2のバリデーションルール（非必須）
+const fromRules2 = [
+  (value: string) => {
+    if (value && !isValidDate(value)) {
+      return '有効な日付を入力してください。'
+    }
+    return true
+  },
+  () => {
+    if (filterFrom2.value) {
+      return new Date(filterFrom2.value) <= new Date(filterTo2.value) || 'From 2の日付はTo 2より前または同じでなければなりません。'
+    }
+    return true
+  }
+]
 
 // Snackbar state
 const snackbar = ref(false)
@@ -135,6 +176,15 @@ const resetFileInput = () => {
   }
 }
 
+// yyyymmdd形式にフォーマットする関数
+const formatDateToYYYYMMDD = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  const yyyy = date.getFullYear()
+  const mm = (date.getMonth() + 1).toString().padStart(2, '0')
+  const dd = date.getDate().toString().padStart(2, '0')
+  return `${yyyy}${mm}${dd}`
+}
+
 // ファイル読み込み
 const handleFile = (event: Event) => {
   const target = event.target as HTMLInputElement
@@ -152,16 +202,17 @@ const handleFile = (event: Event) => {
       const data = new Uint8Array(e.target?.result as ArrayBuffer)
       const workbook = XLSX.read(data, { type: 'array' })
 
-      const sheetName = '楽曲情報'
-      if (!workbook.SheetNames.includes(sheetName)) {
-        showError(`シート "${sheetName}" が見つかりません。`)
+      const mainSheetName = '楽曲情報'
+      if (!workbook.SheetNames.includes(mainSheetName)) {
+        showError(`シート "${mainSheetName}" が見つかりません。`)
         return
       }
 
-      const worksheet = workbook.Sheets[sheetName]
+      // メインシートの処理
+      const worksheet = workbook.Sheets[mainSheetName]
       const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
 
-      console.log(`"${sheetName}" シートのExcelデータ:`, rawData)
+      console.log(`"${mainSheetName}" シートのExcelデータ:`, rawData)
 
       // データの整形
       if (rawData.length > 1) {
@@ -189,6 +240,21 @@ const handleFile = (event: Event) => {
 
         // 日付が存在し、有効なデータのみをフィルタリング
         songInfoData.value = data.filter(item => item.日付 && !isNaN(new Date(item.日付 as string).getTime()))
+      }
+
+      // 「To」日付を yyyymmdd 形式に変換
+      if (filterTo.value) {
+        const toDateStr = formatDateToYYYYMMDD(filterTo.value)
+        console.log(`フォーマットされたTo日付: ${toDateStr}`)
+
+        if (workbook.SheetNames.includes(toDateStr)) {
+          const toSheet = workbook.Sheets[toDateStr]
+          const toSheetData: any[][] = XLSX.utils.sheet_to_json(toSheet, { header: 1, defval: '' })
+          console.log(`"${toDateStr}" シートのデータ:`, toSheetData)
+        } else {
+          console.warn(`シート "${toDateStr}" が見つかりません。`)
+          showError(`シート "${toDateStr}" が見つかりません。`)
+        }
       }
     } catch (error) {
       console.error('ファイルの解析中にエラーが発生しました:', error)
@@ -221,14 +287,20 @@ const filteredSongInfoData = computed(() => {
     const itemDate = new Date(item.日付)
     const fromDate = new Date(filterFrom.value)
     const toDate = new Date(filterTo.value)
+    const fromDate2 = filterFrom2.value ? new Date(filterFrom2.value) : null
+    const toDate2 = filterTo2.value ? new Date(filterTo2.value) : null
 
-    return itemDate >= fromDate && itemDate <= toDate
+    let valid = itemDate >= fromDate && itemDate <= toDate
+    if (fromDate2 && toDate2) {
+      valid = valid && itemDate >= fromDate2 && itemDate <= toDate2
+    }
+    return valid
   })
 })
 
 // filteredSongInfoDataがない場合
 watch(filteredSongInfoData, (newData) => {
-  if (isFilterValid.value && newData.length === 0) {
+  if (isFilterValid.value && songInfoData.value.length > 0 && newData.length === 0) {
     showError('指定した期間内にデータがありません。')
   }
 })
