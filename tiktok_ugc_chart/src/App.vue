@@ -2,20 +2,8 @@
   <v-app>
     <v-main>
       <v-container>
-        <!-- Excel読み込みボタンと日付フィルタ -->
+        <!-- 日付フィルタ -->
         <v-row align="center" justify="start" class="my-4" spacing="4">
-          <v-col cols="12" sm="6" md="3">
-            <v-btn
-              color="primary"
-              @click="triggerFileInput"
-              block
-              :disabled="!isFilterValid"
-            >
-              Excelを読み込む
-            </v-btn>
-          </v-col>
-
-          <!-- From-Toフィルタ -->
           <v-col cols="12" sm="6" md="3">
             <v-text-field
               label="From"
@@ -61,14 +49,16 @@
           </v-col>
         </v-row>
 
-        <!-- 隠しファイル入力 -->
-        <input
-          type="file"
-          ref="fileInput"
-          @change="handleFile"
-          accept=".xlsx, .xls"
-          style="display: none"
-        />
+        <!-- ファイルアップロードボタン -->
+        <v-row>
+          <v-col cols="12" sm="6" md="3">
+            <FileUploadButton
+              buttonLabel="Excelを読み込む"
+              :disabled="!isFilterValid"
+              @file-selected="handleFile"
+            />
+          </v-col>
+        </v-row>
 
         <!-- グラフ表示 -->
         <v-row>
@@ -93,6 +83,7 @@
 import { ref, computed, watch } from 'vue'
 import * as XLSX from 'xlsx'
 import UGCChart from './components/UGCChart.vue'
+import FileUploadButton from './components/FileUploadButton.vue'
 
 // 型定義
 interface SongInfo {
@@ -102,7 +93,22 @@ interface SongInfo {
   総UGC数: number
 }
 
-const fileInput = ref<HTMLInputElement | null>(null)
+interface TikTokPost {
+  投稿ID: string
+  投稿日: string
+  アカウント名: string
+  ニックネーム: string
+  いいね数: number
+  コメント数: number
+  保存数: number
+  シェア数: number
+  再生回数: number
+  フォロワー数: number
+  動画リンク_URL: string
+  更新日: string
+  アイコン: string
+}
+
 const songInfoData = ref<SongInfo[]>([])
 
 // フィルタ用のFrom-To
@@ -153,11 +159,6 @@ const fromRules2 = [
 const snackbar = ref(false)
 const snackbarMessage = ref('')
 
-// ファイル入力をトリガー
-const triggerFileInput = () => {
-  fileInput.value?.click()
-}
-
 // Snackbar表示関数
 const showError = (message: string) => {
   snackbarMessage.value = message
@@ -167,13 +168,6 @@ const showError = (message: string) => {
 // 行が完全に空かどうかを確認
 const isRowEmpty = (row: any[]): boolean => {
   return row.every(cell => cell == null || cell === '')
-}
-
-// ファイル入力をリセットする関数
-const resetFileInput = () => {
-  if (fileInput.value) {
-    fileInput.value.value = ''
-  }
 }
 
 // yyyymmdd形式にフォーマットする関数
@@ -186,16 +180,7 @@ const formatDateToYYYYMMDD = (dateStr: string): string => {
 }
 
 // ファイル読み込み
-const handleFile = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-
-  if (!file) {
-    showError('ファイルが選択されていません。')
-    resetFileInput()
-    return
-  }
-
+const handleFile = (file: File) => {
   const reader = new FileReader()
   reader.onload = (e) => {
     try {
@@ -212,14 +197,12 @@ const handleFile = (event: Event) => {
       const worksheet = workbook.Sheets[mainSheetName]
       const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
 
-      console.log(`"${mainSheetName}" シートのExcelデータ:`, rawData)
-
       // データの整形
       if (rawData.length > 1) {
         const headers: string[] = rawData[0] as string[]
         const data: SongInfo[] = rawData.slice(1)
-          .filter(row => !isRowEmpty(row))
-          .map((row, rowIndex) => {
+          .filter(row => !isRowEmpty(row)) // 空の行を除外
+          .map((row) => { // SongInfoにマッピング
             const rowData: Record<string, any> = {}
             headers.forEach((header, index) => {
               rowData[header] = row[index]
@@ -227,19 +210,9 @@ const handleFile = (event: Event) => {
             return rowData as SongInfo
           })
 
-        // 不正データの検出
-        data.forEach((item, index) => {
-          if (!item.日付) {
-            console.warn(`楽曲情報シートの行 ${index + 2} に日付が欠けています:`, item)
-            showError(`楽曲情報シートの行 ${index + 2} に日付が欠けています。`)
-          } else if (isNaN(new Date(item.日付 as string).getTime())) {
-            console.warn(`楽曲情報シートの行 ${index + 2} に無効な日付形式があります:`, item.日付)
-            showError(`楽曲情報シートの行 ${index + 2} に無効な日付形式があります。`)
-          }
-        })
-
         // 日付が存在し、有効なデータのみをフィルタリング
         songInfoData.value = data.filter(item => item.日付 && !isNaN(new Date(item.日付 as string).getTime()))
+        console.log("楽曲情報: ", songInfoData.value)
       }
 
       // 「To」日付を yyyymmdd 形式に変換
@@ -249,8 +222,44 @@ const handleFile = (event: Event) => {
 
         if (workbook.SheetNames.includes(toDateStr)) {
           const toSheet = workbook.Sheets[toDateStr]
-          const toSheetData: any[][] = XLSX.utils.sheet_to_json(toSheet, { header: 1, defval: '' })
-          console.log(`"${toDateStr}" シートのデータ:`, toSheetData)
+          let toSheetData: any[][] = XLSX.utils.sheet_to_json(toSheet, { header: 1, defval: '' })
+          
+          // ヘッダーを取得
+          const toHeaders: string[] = toSheetData[0] as string[]
+          
+          // 投稿IDのインデックスを取得
+          const postIdIndex = toHeaders.indexOf('投稿ID')
+          if (postIdIndex === -1) {
+            showError(`"投稿ID" 列が "${toDateStr}" シートに存在しません。`)
+          } else {
+            // データ部分をフィルタリング
+            const filteredToSheetData: TikTokPost[] = toSheetData.slice(1)
+              .filter(row => row[postIdIndex] && row[postIdIndex].toString().trim() !== '')
+              .map(row => {
+                const rowData: Record<string, any> = {}
+                toHeaders.forEach((header, index) => {
+                  rowData[header] = row[index]
+                })
+                return rowData as TikTokPost
+              })
+            
+            console.log(`"${toDateStr}" シート: `, filteredToSheetData)
+
+            // filterFrom2とfilterTo2を使ってフィルタリング
+            if (filterFrom2.value && filterTo2.value) {
+              const fromDate2 = new Date(filterFrom2.value)
+              const toDate2 = new Date(filterTo2.value)
+
+              const furtherFilteredData = filteredToSheetData.filter(post => {
+                const postDate = new Date(post.投稿日)
+                return postDate >= fromDate2 && postDate <= toDate2
+              })
+
+              console.log(`"${toDateStr}" シートの From2-To2 範囲でフィルタリングされたデータ:`, furtherFilteredData)
+            } else {
+              console.log('From2 と To2 のフィルタが設定されていません。')
+            }
+          }
         } else {
           console.warn(`シート "${toDateStr}" が見つかりません。`)
           showError(`シート "${toDateStr}" が見つかりません。`)
@@ -259,9 +268,6 @@ const handleFile = (event: Event) => {
     } catch (error) {
       console.error('ファイルの解析中にエラーが発生しました:', error)
       showError('ファイルの解析中にエラーが発生しました。')
-    } finally {
-      // ファイル入力をリセット
-      resetFileInput()
     }
   }
   reader.readAsArrayBuffer(file)
@@ -298,7 +304,7 @@ const filteredSongInfoData = computed(() => {
   })
 })
 
-// filteredSongInfoDataがない場合
+// filteredSongInfoDataがない場合の処理
 watch(filteredSongInfoData, (newData) => {
   if (isFilterValid.value && songInfoData.value.length > 0 && newData.length === 0) {
     showError('指定した期間内にデータがありません。')
