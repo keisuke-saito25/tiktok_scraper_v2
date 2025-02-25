@@ -266,8 +266,7 @@ const handleFile = (file: File) => {
               // フォロワー数で降順ソートし、トップ30を取得
               top30Followers.value = uniqueAccounts
                 .sort((a, b) => b.フォロワー数 - a.フォロワー数)
-                // .slice(0, 30)
-                .slice(31, 61)
+                .slice(0, 30)
 
               console.log('フォロワー数 TOP 30:', top30Followers)
 
