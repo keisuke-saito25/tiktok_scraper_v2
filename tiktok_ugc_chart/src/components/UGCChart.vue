@@ -50,8 +50,8 @@ const getInitialPosition = (index: number) => {
   const spacing = iconSize + padding // スペーシング
 
   return {
-    x: padding + (index % 6) * spacing,
-    y: padding + Math.floor(index / 6) * spacing
+    x: padding + (index % 10) * spacing,
+    y: padding + Math.floor(index / 10) * spacing
   }
 }
 
