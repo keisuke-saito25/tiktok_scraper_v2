@@ -136,8 +136,7 @@
     height: 80px; /* アイコンの高さ */
     z-index: 10; /* チャートより前面に表示 */
     border-radius: 50%; /* 丸く表示 */
-    border: 2px solid #fff; /* 白枠 */
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3); /* 影を追加 */
+    border: 2px solid #90ee90; /* 白枠 */
     cursor: grab; /* ドラッグ可能カーソル */
     user-select: none; /* テキスト選択防止 */
   }

@@ -45,9 +45,13 @@ const loadedFollowerPosts = ref<TikTokPost[]>([])
 
 // 初期位置を設定する関数
 const getInitialPosition = (index: number) => {
+  const iconSize = 80 // アイコンの幅・高さ
+  const padding = 10 // アイコン間のパディング
+  const spacing = iconSize + padding // スペーシング
+
   return {
-    x: 10 + (index % 5) * 50,
-    y: 10 + Math.floor(index / 5) * 50
+    x: padding + (index % 6) * spacing,
+    y: padding + Math.floor(index / 6) * spacing
   }
 }
 
@@ -201,12 +205,11 @@ canvas {
 
 .chart-icon {
   position: absolute;
-  width: 40px; /* アイコンのサイズ調整 */
-  height: 40px;
+  width: 80px; 
+  height: 80px;
   z-index: 10;
   border-radius: 50%;
-  border: 2px solid #fff;
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+  border: 2px solid #90ee90;
   cursor: grab;
   user-select: none;
 }
