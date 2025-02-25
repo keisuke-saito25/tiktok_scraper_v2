@@ -11,5 +11,5 @@ export interface TikTokPost {
     フォロワー数: number;
     動画リンク_URL: string;
     更新日: string;
-    アイコンURL: string;
+    アイコン: string;
   }

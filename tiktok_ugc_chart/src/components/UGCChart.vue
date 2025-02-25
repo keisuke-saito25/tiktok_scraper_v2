@@ -1,34 +1,36 @@
 <template>
   <div class="chart-container" ref="chartContainer">
-    <DraggableIcon
-      :src="iconSrc"
-      :alt="iconAlt"
-      :initialPosition="iconPosition"
-      :containerRef="chartContainer"
-      @update:position="handlePositionUpdate"
-    />
     <canvas ref="canvas"></canvas>
+    
+    <!-- 30個のDraggableIconを表示 -->
+    <DraggableIcon
+      v-for="(post, index) in topFollowerPosts"
+      :key="post.投稿ID"
+      :src="post.アイコン"
+      :alt="post.アカウント名"
+      :initialPosition="getInitialPosition(index)"
+      :containerRef="chartContainer"
+      @update:position="handlePositionUpdate(index, $event)"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { Chart, LineController, LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend } from 'chart.js'
 import type { ChartData, ChartOptions } from 'chart.js'
 import DraggableIcon from './DraggableIcon.vue'
 import type { SongInfo } from '@/types/SongInfo'
+import type { TikTokPost } from '@/types/TikTokPost'
 
 // Chart.jsのコンポーネント登録
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend)
 
 // Props定義
 const props = defineProps<{
-  data: SongInfo[]
+  data: SongInfo[],
+  topFollowerPosts: TikTokPost[]
 }>()
-
-// アイコンのソースとalt属性
-const iconSrc = "https://p16-sign-sg.tiktokcdn.com/tos-alisg-avt-0068/55757448d73b443f8cb49a4df55f73bd~tplv-tiktokx-cropcenter:100:100.jpeg?dr=14579&nonce=1668&refresh_token=b3c4f878035159bf2792866d78db20f0&x-expires=1740196800&x-signature=BfxydXUs9tRk3l%2Btp09rJSxdRno%3D&idc=my&ps=13740610&shcp=81f88b70&shp=a5d48078&t=4d5b0474"
-const iconAlt = "アイコン"
 
 // Canvasとコンテナの参照
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -36,7 +38,16 @@ const chartContainer = ref<HTMLElement | null>(null)
 let chartInstance: Chart | null = null
 
 // アイコンの位置管理
-const iconPosition = ref<{ x: number, y: number }>({ x: 10, y: 10 }) // 初期位置
+const iconPositions = ref<{ x: number, y: number }[]>([])
+
+// 初期位置を設定する関数
+const getInitialPosition = (index: number) => {
+  // チャートの左上から少しずつずらした初期位置
+  return {
+    x: 10 + (index % 5) * 50, // 例: 0, 50, 100, 150, 200
+    y: 10 + Math.floor(index / 5) * 50 // 例: 10, 60, 110, 160, 210
+  }
+}
 
 // データのフォーマット関数
 const formatData = (data: SongInfo[]) => {
@@ -78,7 +89,7 @@ const renderChart = () => {
 
     const options: ChartOptions<'line'> = {
       responsive: true,
-      maintainAspectRatio: false, // レスポンシブ対応
+      maintainAspectRatio: false,
       scales: {
         x: {
           title: {
@@ -117,7 +128,7 @@ const renderChart = () => {
   }
 }
 
-// マウント時にチャートを描画
+// チャートのマウント時にレンダリング
 onMounted(() => {
   renderChart()
 })
@@ -127,9 +138,14 @@ watch(() => props.data, () => {
   renderChart()
 }, { deep: true })
 
-// アイコンの位置が更新されたときのハンドラー
-const handlePositionUpdate = (newPosition: { x: number, y: number }) => {
-  iconPosition.value = newPosition
+// topFollowerPostsが変更されたときに初期位置を設定
+watch(() => props.topFollowerPosts, (newPosts) => {
+  iconPositions.value = newPosts.map((_, index) => getInitialPosition(index))
+})
+
+// アイコン位置の更新ハンドラー
+const handlePositionUpdate = (index: number, newPosition: { x: number, y: number }) => {
+  iconPositions.value[index] = newPosition
 }
 </script>
 
@@ -137,11 +153,27 @@ const handlePositionUpdate = (newPosition: { x: number, y: number }) => {
 .chart-container {
   position: relative;
   width: 100%;
-  height: 400px; /*  */
+  height: 600px; 
 }
 
 canvas {
   width: 100% !important;
   height: 100% !important;
+}
+
+.chart-icon {
+  position: absolute;
+  width: 40px; /* アイコンのサイズ調整 */
+  height: 40px;
+  z-index: 10;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+  cursor: grab;
+  user-select: none;
+}
+
+.chart-icon:active {
+  cursor: grabbing;
 }
 </style>

@@ -63,7 +63,12 @@
         <!-- グラフ表示 -->
         <v-row>
           <v-col cols="12">
-            <UGCChart :data="filteredSongInfoData" v-if="filteredSongInfoData.length > 0" />
+            <!-- <UGCChart :data="filteredSongInfoData" v-if="filteredSongInfoData.length > 0" /> -->
+              <UGCChart 
+              :data="filteredSongInfoData" 
+              :top-follower-posts="top30Followers" 
+              v-if="filteredSongInfoData.length > 0" 
+            />
           </v-col>
         </v-row>
       </v-container>
@@ -132,6 +137,8 @@ const fromRules2 = [
     return true
   }
 ]
+
+const top30Followers = ref<TikTokPost[]>([])
 
 // Snackbar state
 const snackbar = ref(false)
@@ -257,9 +264,10 @@ const handleFile = (file: File) => {
               console.log('重複排除後のデータ:', uniqueAccounts)
 
               // フォロワー数で降順ソートし、トップ30を取得
-              const top30Followers = uniqueAccounts
+              top30Followers.value = uniqueAccounts
                 .sort((a, b) => b.フォロワー数 - a.フォロワー数)
-                .slice(0, 30)
+                // .slice(0, 30)
+                .slice(31, 61)
 
               console.log('フォロワー数 TOP 30:', top30Followers)
 
