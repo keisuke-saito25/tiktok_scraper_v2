@@ -1,41 +1,44 @@
 <template>
   <div class="chart-container" ref="chartContainer">
-    <!-- 試しに適当なアイコン -->
-    <!-- ドラッグ可能なアイコン画像 -->
-    <img
-      src="https://p16-sign-sg.tiktokcdn.com/tos-alisg-avt-0068/55757448d73b443f8cb49a4df55f73bd~tplv-tiktokx-cropcenter:100:100.jpeg?dr=14579&nonce=1668&refresh_token=b3c4f878035159bf2792866d78db20f0&x-expires=1740196800&x-signature=BfxydXUs9tRk3l%2Btp09rJSxdRno%3D&idc=my&ps=13740610&shcp=81f88b70&shp=a5d48078&t=4d5b0474"
-      alt="アイコン"
-      class="chart-icon"
-      :style="{ top: iconPosition.y + 'px', left: iconPosition.x + 'px' }"
-      @mousedown="startDrag"
-      @touchstart="startDrag"
+    <DraggableIcon
+      :src="iconSrc"
+      :alt="iconAlt"
+      :initialPosition="iconPosition"
+      :containerRef="chartContainer"
+      @update:position="handlePositionUpdate"
     />
     <canvas ref="canvas"></canvas>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, onBeforeUnmount } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { Chart, LineController, LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend } from 'chart.js'
 import type { ChartData, ChartOptions } from 'chart.js'
+import DraggableIcon from './DraggableIcon.vue'
+import type { SongInfo } from '@/types/SongInfo'
 
-interface SongInfo {
-  楽曲名: string
-  楽曲URL: string
-  日付: string | number
-  総UGC数: number
-}
-
+// Chart.jsのコンポーネント登録
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend)
 
+// Props定義
 const props = defineProps<{
   data: SongInfo[]
 }>()
 
+// アイコンのソースとalt属性
+const iconSrc = "https://p16-sign-sg.tiktokcdn.com/tos-alisg-avt-0068/55757448d73b443f8cb49a4df55f73bd~tplv-tiktokx-cropcenter:100:100.jpeg?dr=14579&nonce=1668&refresh_token=b3c4f878035159bf2792866d78db20f0&x-expires=1740196800&x-signature=BfxydXUs9tRk3l%2Btp09rJSxdRno%3D&idc=my&ps=13740610&shcp=81f88b70&shp=a5d48078&t=4d5b0474"
+const iconAlt = "アイコン"
+
+// Canvasとコンテナの参照
 const canvas = ref<HTMLCanvasElement | null>(null)
 const chartContainer = ref<HTMLElement | null>(null)
-let chart: Chart | null = null
+let chartInstance: Chart | null = null
 
+// アイコンの位置管理
+const iconPosition = ref<{ x: number, y: number }>({ x: 10, y: 10 }) // 初期位置
+
+// データのフォーマット関数
 const formatData = (data: SongInfo[]) => {
   const labels = data.map((item, index) => {
     if (!item.日付) {
@@ -58,6 +61,7 @@ const formatData = (data: SongInfo[]) => {
   return { labels, ugcData }
 }
 
+// チャートのレンダリング関数
 const renderChart = () => {
   if (canvas.value) {
     const { labels, ugcData } = formatData(props.data)
@@ -101,11 +105,11 @@ const renderChart = () => {
       }
     }
 
-    if (chart) {
-      chart.destroy()
+    if (chartInstance) {
+      chartInstance.destroy()
     }
 
-    chart = new Chart(canvas.value, {
+    chartInstance = new Chart(canvas.value, {
       type: 'line',
       data: chartData,
       options
@@ -113,112 +117,20 @@ const renderChart = () => {
   }
 }
 
+// マウント時にチャートを描画
 onMounted(() => {
   renderChart()
 })
 
+// データの変更を監視してチャートを再描画
 watch(() => props.data, () => {
   renderChart()
 }, { deep: true })
 
-// ドラッグ機能の実装
-const iconPosition = ref({ x: 10, y: 10 }) // 初期位置
-const isDragging = ref(false)
-const startX = ref(0)
-const startY = ref(0)
-const initialX = ref(0)
-const initialY = ref(0)
-
-// ドラッグ開始
-const startDrag = (event: MouseEvent | TouchEvent) => {
-  isDragging.value = true
-  if (event instanceof MouseEvent) {
-    startX.value = event.clientX
-    startY.value = event.clientY
-  } else if (event instanceof TouchEvent) {
-    startX.value = event.touches[0].clientX
-    startY.value = event.touches[0].clientY
-  }
-  initialX.value = iconPosition.value.x
-  initialY.value = iconPosition.value.y
-
-  // イベントリスナーを追加
-  window.addEventListener('mousemove', onDrag)
-  window.addEventListener('mouseup', endDrag)
-  window.addEventListener('touchmove', onDrag, { passive: false })
-  window.addEventListener('touchend', endDrag)
-  window.addEventListener('touchcancel', endDrag)
-
-  event.preventDefault()
+// アイコンの位置が更新されたときのハンドラー
+const handlePositionUpdate = (newPosition: { x: number, y: number }) => {
+  iconPosition.value = newPosition
 }
-
-// ドラッグ中
-const onDrag = (event: MouseEvent | TouchEvent) => {
-  if (!isDragging.value) return
-
-  let currentX = 0
-  let currentY = 0
-
-  if (event instanceof MouseEvent) {
-    currentX = event.clientX
-    currentY = event.clientY
-  } else if (event instanceof TouchEvent) {
-    event.preventDefault()
-    if (event.touches.length > 0) {
-      currentX = event.touches[0].clientX
-      currentY = event.touches[0].clientY
-    }
-  }
-
-  const dx = currentX - startX.value
-  const dy = currentY - startY.value
-
-  let newX = initialX.value + dx
-  let newY = initialY.value + dy
-
-  if (chartContainer.value) {
-    const containerRect = chartContainer.value.getBoundingClientRect()
-    const iconWidth = 80 // .chart-iconのwidthと同じ
-    const iconHeight = 80 // .chart-iconのheightと同じ
-
-    // コンテナ内の相対座標を計算
-    const minX = 0
-    const minY = 0
-    const maxX = containerRect.width - iconWidth
-    const maxY = containerRect.height - iconHeight
-
-    // 新しい位置を制限
-    newX = Math.max(minX, Math.min(newX, maxX))
-    newY = Math.max(minY, Math.min(newY, maxY))
-  }
-
-  iconPosition.value = {
-    x: newX,
-    y: newY
-  }
-}
-
-// ドラッグ終了
-const endDrag = () => {
-  if (isDragging.value) {
-    isDragging.value = false
-    // イベントリスナーを削除
-    window.removeEventListener('mousemove', onDrag)
-    window.removeEventListener('mouseup', endDrag)
-    window.removeEventListener('touchmove', onDrag)
-    window.removeEventListener('touchend', endDrag)
-    window.removeEventListener('touchcancel', endDrag)
-  }
-}
-
-// コンポーネントが破棄される前にイベントリスナーをクリーンアップ
-onBeforeUnmount(() => {
-  window.removeEventListener('mousemove', onDrag)
-  window.removeEventListener('mouseup', endDrag)
-  window.removeEventListener('touchmove', onDrag)
-  window.removeEventListener('touchend', endDrag)
-  window.removeEventListener('touchcancel', endDrag)
-})
 </script>
 
 <style scoped>
@@ -226,22 +138,6 @@ onBeforeUnmount(() => {
   position: relative;
   width: 100%;
   height: 400px; /*  */
-}
-
-.chart-icon {
-  position: absolute;
-  width: 80px; /* 画像の幅を */
-  height: 80px; /* 画像の高さ */
-  z-index: 10; /* グラフより前面 */
-  border-radius: 50%; /* 画像を丸くする */
-  border: 2px solid #fff; /* 画像に白い枠線を追加 */
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3); /* 画像に影を追加 */
-  cursor: grab; /* ドラッグ可能であることを示すカーソル */
-  user-select: none; /* 画像の選択を防止 */
-}
-
-.chart-icon:active {
-  cursor: grabbing; /* ドラッグ中のカーソル */
 }
 
 canvas {
