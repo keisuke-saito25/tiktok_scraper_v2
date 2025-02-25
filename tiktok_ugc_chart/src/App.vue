@@ -63,7 +63,6 @@
         <!-- グラフ表示 -->
         <v-row>
           <v-col cols="12">
-            <!-- <UGCChart :data="filteredSongInfoData" v-if="filteredSongInfoData.length > 0" /> -->
               <UGCChart 
               :data="filteredSongInfoData" 
               :top-follower-posts="top30Followers" 
@@ -71,6 +70,30 @@
             />
           </v-col>
         </v-row>
+
+        <v-row>
+        <V-col cols="12" sm="6" md="4">
+          <v-text-field
+            v-model="searchAccountName"
+            label="アカウント名で検索"
+            append-icon="mdi-magnify"
+            clearable
+          ></v-text-field>
+        </V-col>
+      </v-row>
+
+      <!-- ユニークアカウントのテーブル表示 -->
+      <v-row>
+        <v-col cols="12">
+          <v-data-table
+            :headers="tableHeaders"
+            :items="filteredAccounts"
+            class="elevation-1"
+            :items-per-page="10"
+          >
+          </v-data-table>
+        </v-col>
+      </v-row>
       </v-container>
 
       <!-- Snackbar for Errors -->
@@ -93,6 +116,15 @@ import type { SongInfo } from './types/SongInfo'
 import type { TikTokPost } from './types/TikTokPost'
 
 const songInfoData = ref<SongInfo[]>([])
+const uniqueAccounts = ref<TikTokPost[]>([])
+const searchAccountName = ref<string>('')
+
+const filteredAccounts = computed(() => {
+  if(!searchAccountName.value) return uniqueAccounts.value
+  return uniqueAccounts.value.filter(account =>
+    account.アカウント名.toLowerCase().includes(searchAccountName.value.toLowerCase())
+  )
+})
 
 // フィルタ用のFrom-To
 const filterFrom = ref<string>('')
@@ -260,11 +292,11 @@ const handleFile = (file: File) => {
                 }
               })
 
-              const uniqueAccounts = Array.from(uniqueAccountsMap.values())
+              uniqueAccounts.value = Array.from(uniqueAccountsMap.values())
               console.log('重複排除後のデータ:', uniqueAccounts)
 
               // フォロワー数で降順ソートし、トップ30を取得
-              top30Followers.value = uniqueAccounts
+              top30Followers.value = uniqueAccounts.value
                 .sort((a, b) => b.フォロワー数 - a.フォロワー数)
                 .slice(0, 30)
 
@@ -318,6 +350,17 @@ watch(filteredSongInfoData, (newData) => {
     showError('指定した期間内にデータがありません。')
   }
 })
+
+const tableHeaders = [
+  { title: 'アカウント名', key: 'アカウント名' },
+  { title: 'ニックネーム', key: 'ニックネーム' },
+  { title: 'いいね数', key: 'いいね数' },
+  { title: 'コメント数', key: 'コメント数' },
+  { title: '保存数', key: '保存数' },
+  { title: 'シェア数', key: 'シェア数' },
+  { title: '再生回数', key: '再生回数' },
+  { title: 'フォロワー数', key: 'フォロワー数' },
+]
 </script>
 
 <style>

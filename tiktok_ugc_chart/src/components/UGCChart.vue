@@ -2,9 +2,9 @@
   <div class="chart-container" ref="chartContainer">
     <canvas ref="canvas"></canvas>
     
-    <!-- 30個のDraggableIconを表示 -->
+    <!-- ロード済みのDraggableIconを表示 -->
     <DraggableIcon
-      v-for="(post, index) in topFollowerPosts"
+      v-for="(post, index) in loadedFollowerPosts"
       :key="post.投稿ID"
       :src="post.アイコン"
       :alt="post.アカウント名"
@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { Chart, LineController, LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend } from 'chart.js'
 import type { ChartData, ChartOptions } from 'chart.js'
 import DraggableIcon from './DraggableIcon.vue'
@@ -40,12 +40,14 @@ let chartInstance: Chart | null = null
 // アイコンの位置管理
 const iconPositions = ref<{ x: number, y: number }[]>([])
 
+// ロード済みの投稿を管理するリスト
+const loadedFollowerPosts = ref<TikTokPost[]>([])
+
 // 初期位置を設定する関数
 const getInitialPosition = (index: number) => {
-  // チャートの左上から少しずつずらした初期位置
   return {
-    x: 10 + (index % 5) * 50, // 例: 0, 50, 100, 150, 200
-    y: 10 + Math.floor(index / 5) * 50 // 例: 10, 60, 110, 160, 210
+    x: 10 + (index % 5) * 50,
+    y: 10 + Math.floor(index / 5) * 50
   }
 }
 
@@ -63,7 +65,6 @@ const formatData = (data: SongInfo[]) => {
         console.warn(`データの項目 ${index + 1} に無効な日付形式があります:`, item.日付)
         return '無効な日付'
       }
-      // 日付をフォーマット
       return `${date.getFullYear()}/${(date.getMonth()+1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`
     }
     return item.日付.toString()
@@ -128,9 +129,30 @@ const renderChart = () => {
   }
 }
 
-// チャートのマウント時にレンダリング
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+// 画像を順次ロードする関数
+const loadFollowerPostsSequentially = async () => {
+  for (const post of props.topFollowerPosts) {
+    await wait(1000)
+    await loadImage(post.アイコン)
+    loadedFollowerPosts.value.push(post)
+  }
+}
+
+const loadImage = (src: string): Promise<void> => {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.src = src
+    img.onload = () => resolve()
+    img.onerror = () => resolve() // エラー時も次に進む
+  })
+}
+
+// チャートのマウント時にレンダリングと画像ロードを開始
 onMounted(() => {
   renderChart()
+  loadFollowerPostsSequentially()
 })
 
 // データの変更を監視してチャートを再描画
