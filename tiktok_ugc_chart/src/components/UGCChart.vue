@@ -5,12 +5,12 @@
     <!-- ロード済みのDraggableIconを表示 -->
     <DraggableIcon
       v-for="(post, index) in loadedFollowerPosts"
-      :key="post.投稿ID"
+      :key="post.uniqueId"
       :src="post.アイコン"
       :alt="post.アカウント名"
       :initialPosition="getInitialPosition(index)"
       :containerRef="chartContainer"
-      @update:position="handlePositionUpdate(index, $event)"
+      @update:position="handlePositionUpdate(post.uniqueId, $event)"
     />
   </div>
 </template>
@@ -134,10 +134,19 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 // 画像を順次ロードする関数
 const loadFollowerPostsSequentially = async () => {
   for (const post of props.topFollowerPosts) {
-    await wait(1000)
+    await wait(500)
     await loadImage(post.アイコン)
     loadedFollowerPosts.value.push(post)
   }
+}
+
+// 画像を並列でロードする関数
+const loadFollowerPostsInParallel = async () => {
+  const loadPromises = props.topFollowerPosts.map(async (post) => {
+    await loadImage(post.アイコン)
+    loadedFollowerPosts.value.push(post)
+  })
+  await Promise.all(loadPromises)
 }
 
 const loadImage = (src: string): Promise<void> => {
@@ -153,6 +162,7 @@ const loadImage = (src: string): Promise<void> => {
 onMounted(() => {
   renderChart()
   loadFollowerPostsSequentially()
+  // loadFollowerPostsInParallel()
 })
 
 // データの変更を監視してチャートを再描画
@@ -164,10 +174,16 @@ watch(() => props.data, () => {
 watch(() => props.topFollowerPosts, (newPosts) => {
   iconPositions.value = newPosts.map((_, index) => getInitialPosition(index))
 })
-
+watch(() => props.topFollowerPosts, (newPosts) => {
+  iconPositions.value = newPosts.map((post, index) => getInitialPosition(index))
+  loadedFollowerPosts.value = newPosts.filter(post => post.isVisible)
+})
 // アイコン位置の更新ハンドラー
-const handlePositionUpdate = (index: number, newPosition: { x: number, y: number }) => {
-  iconPositions.value[index] = newPosition
+const handlePositionUpdate = (uniqueId: string, newPosition: { x: number, y: number }) => {
+  const index = loadedFollowerPosts.value.findIndex(post => post.uniqueId === uniqueId)
+  if (index !== -1) {
+    iconPositions.value[index] = newPosition
+  }
 }
 </script>
 

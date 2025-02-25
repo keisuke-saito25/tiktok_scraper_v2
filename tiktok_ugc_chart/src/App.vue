@@ -63,13 +63,13 @@
         <!-- グラフ表示 -->
         <v-row>
           <v-col cols="12">
-              <UGCChart 
+            <UGCChart 
               :data="filteredSongInfoData" 
-              :top-follower-posts="top30Followers" 
+              :top-follower-posts="uniqueAccounts.filter(account => account.isVisible)" 
               v-if="filteredSongInfoData.length > 0" 
-            />
-          </v-col>
-        </v-row>
+            /> 
+            </v-col>
+          </v-row>
 
         <v-row>
         <V-col cols="12" sm="6" md="4">
@@ -91,6 +91,12 @@
             class="elevation-1"
             :items-per-page="10"
           >
+            <template v-slot:item.isVisible="{ item }">
+              <v-checkbox
+                v-model="item.isVisible"
+                @change="toggleVisibility(item)"
+              ></v-checkbox>
+            </template>
           </v-data-table>
         </v-col>
       </v-row>
@@ -114,6 +120,7 @@ import UGCChart from './components/UGCChart.vue'
 import FileUploadButton from './components/FileUploadButton.vue'
 import type { SongInfo } from './types/SongInfo'
 import type { TikTokPost } from './types/TikTokPost'
+import { generateUniqueId } from './utils/generateUniqueId'
 
 const songInfoData = ref<SongInfo[]>([])
 const uniqueAccounts = ref<TikTokPost[]>([])
@@ -133,7 +140,8 @@ const filterTo = ref<string>('')
 // 新しいフィルタ用のFrom-To
 const filterFrom2 = ref<string>('')
 const filterTo2 = computed(() => filterTo.value) // To 2 は To と同じ値
-
+const toggleVisibility = (item: TikTokPost) => {
+}
 // バリデーションルール
 const required = (value: string) => !!value || '必須項目です。'
 const isValidDate = (dateStr: string): boolean => {
@@ -257,7 +265,11 @@ const handleFile = (file: File) => {
                 toHeaders.forEach((header, index) => {
                   rowData[header] = row[index]
                 })
-                return rowData as TikTokPost
+                return {
+                  ...rowData,
+                  uniqueId: generateUniqueId(),
+                  isVisible: false // 初期状態は非表示
+                } as TikTokPost
               })
             
             console.log(`"${toDateStr}" シート: `, filteredToSheetData)
@@ -299,6 +311,14 @@ const handleFile = (file: File) => {
               top30Followers.value = uniqueAccounts.value
                 .sort((a, b) => b.フォロワー数 - a.フォロワー数)
                 .slice(0, 30)
+              
+              uniqueAccounts.value.forEach(account => {
+                if (top30Followers.value.find(top => top.uniqueId === account.uniqueId)) {
+                  account.isVisible = true
+                } else {
+                  account.isVisible = false
+                }
+              })
 
               console.log('フォロワー数 TOP 30:', top30Followers)
 
@@ -352,6 +372,7 @@ watch(filteredSongInfoData, (newData) => {
 })
 
 const tableHeaders = [
+  { title: '表示', key: 'isVisible' },  
   { title: 'アカウント名', key: 'アカウント名' },
   { title: 'ニックネーム', key: 'ニックネーム' },
   { title: 'いいね数', key: 'いいね数' },
