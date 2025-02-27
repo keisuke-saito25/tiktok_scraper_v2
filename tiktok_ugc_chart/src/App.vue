@@ -1,69 +1,89 @@
 <template>
   <v-app>
+    <v-app-bar app color="primary" dark>
+      <v-toolbar-title>TikTok分析ダッシュボード</v-toolbar-title>
+    </v-app-bar>
+
     <v-main>
       <v-container>
-        <!-- 日付フィルタ -->
-        <DateRangeFilter 
-          :initial-from="filterFrom"
-          :initial-to="filterTo"
-          :initial-from2="filterFrom2"
-          @update:filters="handleFilterUpdate"
-        />
+        <!-- 機能切り替えタブ -->
+        <v-tabs v-model="activeTab" background-color="primary" dark>
+          <v-tab value="ugc-chart">UGCチャート</v-tab>
+          <v-tab value="ranking">ランキング</v-tab>
+        </v-tabs>
 
-        <!-- ファイルアップロードボタンとエクスポートボタン -->
-        <v-row class="my-4">
-          <v-col cols="12" sm="6" md="3" class="d-flex">
-            <FileUploadButton
-              buttonLabel="Excelを読み込む"
-              :disabled="!isFilterValid"
-              @file-selected="handleFile"
+        <v-window v-model="activeTab" class="mt-5">
+          <!-- UGCチャート機能 -->
+          <v-window-item value="ugc-chart">
+            <!-- 日付フィルタ -->
+            <DateRangeFilter 
+              :initial-from="filterFrom"
+              :initial-to="filterTo"
+              :initial-from2="filterFrom2"
+              @update:filters="handleFilterUpdate"
             />
-            <!-- エクスポートボタンを追加 -->
-            <v-btn
-              class="ml-2"
-              color="primary"
-              :disabled="!filteredSongInfoData.length"
-              @click="handleExportChart"
-            >
-              チャートを保存
-            </v-btn>
-            <v-btn
-              class="ml-2"
-              color="primary"
-              :disabled="!filteredSongInfoData.length"
-              @click="handleExportIcons"
-            >
-              アイコンを保存
-            </v-btn>
-            <v-btn
-              class="ml-2"
-              color="primary"
-              :disabled="!filteredSongInfoData.length"
-              @click="handleExportChartAndIcons"
-            >
-              全体を保存
-            </v-btn>
-          </v-col>
-        </v-row>
 
-        <!-- グラフ表示 -->
-        <v-row>
-          <v-col cols="12">
-            <UGCChart 
-              ref="ugcChartRef"
-              :data="filteredSongInfoData" 
-              :top-follower-posts="uniqueAccounts.filter(account => account.isVisible)" 
-              v-if="filteredSongInfoData.length > 0" 
-            />  
-          </v-col>
-        </v-row>
+            <!-- ファイルアップロードボタンとエクスポートボタン -->
+            <v-row class="my-4">
+              <v-col cols="12" sm="6" md="3" class="d-flex">
+                <FileUploadButton
+                  buttonLabel="Excelを読み込む"
+                  :disabled="!isFilterValid"
+                  @file-selected="handleFile"
+                />
+                <!-- エクスポートボタンを追加 -->
+                <v-btn
+                  class="ml-2"
+                  color="primary"
+                  :disabled="!filteredSongInfoData.length"
+                  @click="handleExportChart"
+                >
+                  チャートを保存
+                </v-btn>
+                <v-btn
+                  class="ml-2"
+                  color="primary"
+                  :disabled="!filteredSongInfoData.length"
+                  @click="handleExportIcons"
+                >
+                  アイコンを保存
+                </v-btn>
+                <v-btn
+                  class="ml-2"
+                  color="primary"
+                  :disabled="!filteredSongInfoData.length"
+                  @click="handleExportChartAndIcons"
+                >
+                  全体を保存
+                </v-btn>
+              </v-col>
+            </v-row>
 
-        <!-- アカウントテーブル -->
-        <AccountsTable 
-          :accounts="uniqueAccounts"
-          @toggle-visibility="toggleVisibility"
-          @toggle-orange-border="toggleOrangeBorder"
-        />
+            <!-- グラフ表示 -->
+            <v-row>
+              <v-col cols="12">
+                <UGCChart 
+                  ref="ugcChartRef"
+                  :data="filteredSongInfoData" 
+                  :top-follower-posts="uniqueAccounts.filter(account => account.isVisible)" 
+                  v-if="filteredSongInfoData.length > 0" 
+                />
+              </v-col>
+            </v-row>
+
+            <!-- アカウントテーブル -->
+            <AccountsTable 
+              :accounts="uniqueAccounts"
+              @toggle-visibility="toggleVisibility"
+              @toggle-orange-border="toggleOrangeBorder"
+            />
+          </v-window-item>
+
+          <!-- ランキング機能 -->
+          <v-window-item value="ranking">
+            <TikTokRanking />
+          </v-window-item>
+        </v-window>
       </v-container>
 
       <!-- Snackbar for Errors -->
@@ -84,6 +104,7 @@ import UGCChart from './components/UGCChart.vue'
 import FileUploadButton from './components/FileUploadButton.vue'
 import DateRangeFilter from './components/DateRangeFilter.vue'
 import AccountsTable from './components/AccountsTable.vue'
+import TikTokRanking from './components/TikTokRanking.vue'
 import type { SongInfo } from './types/SongInfo'
 import type { TikTokPost } from './types/TikTokPost'
 import { 
@@ -94,6 +115,9 @@ import {
   getTopFollowerPosts 
 } from './utils/fileHandler'
 import { formatDateToYYYYMMDD, isValidDate } from './utils/dateUtils'
+
+// アクティブタブ
+const activeTab = ref('ugc-chart')
 
 // データモデル
 const songInfoData = ref<SongInfo[]>([])

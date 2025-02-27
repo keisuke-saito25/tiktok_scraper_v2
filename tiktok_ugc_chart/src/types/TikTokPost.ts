@@ -14,5 +14,7 @@ export interface TikTokPost {
     更新日: string;
     アイコン: string;
     isVisible: boolean;
-    isOrangeBorder: boolean 
+    isOrangeBorder: boolean
+    楽曲名?: string; 
+    [key: string]: string | number | boolean | undefined;
   }
