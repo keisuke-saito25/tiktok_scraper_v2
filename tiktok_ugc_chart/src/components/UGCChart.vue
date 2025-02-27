@@ -8,8 +8,9 @@
       :key="post.uniqueId"
       :src="post.アイコン"
       :alt="post.アカウント名"
-      :initialPosition="getInitialPosition(index)"
+      :initialPosition="getInitialPosition(post.uniqueId, index)"
       :containerRef="chartContainer"
+      :isOrangeBorder="post.isOrangeBorder"
       @update:position="handlePositionUpdate(post.uniqueId, $event)"
     />
   </div>
@@ -37,22 +38,31 @@ const canvas = ref<HTMLCanvasElement | null>(null)
 const chartContainer = ref<HTMLElement | null>(null)
 let chartInstance: Chart | null = null
 
-// アイコンの位置管理
-const iconPositions = ref<{ x: number, y: number }[]>([])
+// アイコンの位置管理をオブジェクトに変更
+const iconPositions = ref<Record<string, { x: number, y: number }>>({})
 
 // ロード済みの投稿を管理するリスト
 const loadedFollowerPosts = ref<TikTokPost[]>([])
 
 // 初期位置を設定する関数
-const getInitialPosition = (index: number) => {
+const getInitialPosition = (uniqueId: string, index: number) => {
+  if (iconPositions.value[uniqueId]) {
+    return iconPositions.value[uniqueId]
+  }
+
   const iconSize = 80 // アイコンの幅・高さ
   const padding = 10 // アイコン間のパディング
   const spacing = iconSize + padding // スペーシング
 
-  return {
+  const position = {
     x: padding + (index % 10) * spacing,
     y: padding + Math.floor(index / 10) * spacing
   }
+
+  // 初期位置を保存
+  iconPositions.value[uniqueId] = position
+
+  return position
 }
 
 // データのフォーマット関数
@@ -135,18 +145,9 @@ const renderChart = () => {
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-// 画像を順次ロードする関数
-const loadFollowerPostsSequentially = async () => {
-  for (const post of props.topFollowerPosts) {
-    await wait(500)
-    await loadImage(post.アイコン)
-    loadedFollowerPosts.value.push(post)
-  }
-}
-
 // 画像を並列でロードする関数（必要に応じて使用）
 const loadFollowerPostsInParallel = async () => {
-  const loadPromises = props.topFollowerPosts.map(async (post) => {
+  const loadPromises = props.topFollowerPosts.map(async (post, index) => {
     await loadImage(post.アイコン)
     loadedFollowerPosts.value.push(post)
   })
@@ -174,8 +175,7 @@ const loadImage = (src: string): Promise<void> => {
 // チャートのマウント時にレンダリングと画像ロードを開始
 onMounted(() => {
   renderChart()
-  loadFollowerPostsSequentially()
-  // loadFollowerPostsInParallel()
+  loadFollowerPostsInParallel()
 })
 
 // データの変更を監視してチャートを再描画
@@ -183,26 +183,19 @@ watch(() => props.data, () => {
   renderChart()
 }, { deep: true })
 
-// topFollowerPostsが変更されたときに初期位置を設定し、画像をロード
+// topFollowerPostsが変更されたときに位置情報をリセットせずに画像をロード
 watch(() => props.topFollowerPosts, async (newPosts) => {
-  // 初期位置を設定
-  iconPositions.value = newPosts.map((post, index) => getInitialPosition(index))
-
   // ロード済みの投稿をリセット
   loadedFollowerPosts.value = []
 
   // 画像ロードをトリガー
-  await loadFollowerPostsSequentially()
+  loadFollowerPostsInParallel()
 })
 
-	// アイコン位置の更新ハンドラー		
-	const handlePositionUpdate = (uniqueId: string, newPosition: { x: number, y: number }) => {		
-	const index = loadedFollowerPosts.value.findIndex(post => post.uniqueId === uniqueId)		
-	if (index !== -1) {		
-	iconPositions.value[index] = newPosition		
-	}		
-	}
-
+// アイコン位置の更新ハンドラー
+const handlePositionUpdate = (uniqueId: string, newPosition: { x: number, y: number }) => {
+  iconPositions.value[uniqueId] = newPosition
+}
 </script>
 
 <style scoped>
@@ -226,6 +219,10 @@ canvas {
   border: 2px solid #90ee90;
   cursor: grab;
   user-select: none;
+}
+
+.chart-icon.orange-border {
+  border-color: orange; /* オレンジの縁 */
 }
 
 .chart-icon:active {

@@ -68,8 +68,8 @@
               :top-follower-posts="uniqueAccounts.filter(account => account.isVisible)" 
               v-if="filteredSongInfoData.length > 0" 
             /> 
-            </v-col>
-          </v-row>
+          </v-col>
+        </v-row>
 
         <v-row>
         <V-col cols="12" sm="6" md="4">
@@ -95,6 +95,13 @@
               <v-checkbox
                 v-model="item.isVisible"
                 @change="toggleVisibility(item)"
+              ></v-checkbox>
+            </template>
+
+            <template v-slot:item.isOrangeBorder="{ item }">
+              <v-checkbox
+                v-model="item.isOrangeBorder"
+                @change="toggleOrangeBorder(item)"
               ></v-checkbox>
             </template>
           </v-data-table>
@@ -225,6 +232,21 @@ const parsePostDate = (dateStr: string, toYear: number): string => {
   return dateStr
 }
 
+const applyFilters = () => {
+  if (!isFilterValid.value) {
+    filteredSongInfoData.value = []
+    return
+  }
+
+  filteredSongInfoData.value = songInfoData.value.filter(item => {
+    if (typeof item.日付 !== 'string') return false
+    const itemDate = new Date(item.日付)
+    const fromDate = new Date(filterFrom.value)
+    const toDate = new Date(filterTo.value)
+
+    return itemDate >= fromDate && itemDate <= toDate
+  })
+}
 
 // ファイル読み込み
 const handleFile = (file: File) => {
@@ -259,12 +281,18 @@ const handleFile = (file: File) => {
               if (key) rowData[key] = row[index]
             })
 
+            rowData.isOrangeBorder = false
+
             return rowData as SongInfo
           })
 
         // 日付が存在し、有効なデータのみをフィルタリング
-        songInfoData.value = data.filter(item => item.日付 && !isNaN(new Date(item.日付 as string).getTime()))
-        console.log("楽曲情報: ", songInfoData.value)
+        songInfoData.value = data.filter(item => item.日付 && !isNaN(new Date(item.日付 as string).getTime())
+        )
+
+        // フィルタ適用
+        applyFilters()
+        console.log("楽曲情報: ", filteredSongInfoData.value)
       }
 
       // 「To」日付の処理
@@ -312,7 +340,8 @@ const handleFile = (file: File) => {
                 return {
                   ...rowData,
                   uniqueId: generateUniqueId(),
-                  isVisible: false // 初期状態は非表示
+                  isVisible: false, // 初期状態は非表示
+                  isOrangeBorder: false,
                 } as TikTokPost
               })
             
@@ -393,31 +422,11 @@ const isFilterValid = computed(() => {
   )
 })
 
-// フィルタリングされたデータ
-const filteredSongInfoData = computed(() => {
-  if (!isFilterValid.value) {
-    return []
-  }
-
-  return songInfoData.value.filter(item => {
-    if (typeof item.日付 !== 'string') return false
-    const itemDate = new Date(item.日付)
-    const fromDate = new Date(filterFrom.value)
-    const toDate = new Date(filterTo.value)
-
-    return itemDate >= fromDate && itemDate <= toDate
-  })
-})
-
-// filteredSongInfoDataがない場合の処理
-watch(filteredSongInfoData, (newData) => {
-  if (isFilterValid.value && songInfoData.value.length > 0 && newData.length === 0) {
-    showError('指定した期間内にデータがありません。')
-  }
-})
+const filteredSongInfoData = ref<SongInfo[]>([])
 
 const tableHeaders = [
   { title: '表示', key: 'isVisible' },  
+  { title: 'オレンジ', key: 'isOrangeBorder' },
   { title: 'アカウント名', key: 'アカウント名' },
   { title: 'ニックネーム', key: 'ニックネーム' },
   { title: 'いいね数', key: 'いいね数' },
@@ -427,6 +436,9 @@ const tableHeaders = [
   { title: '再生回数', key: '再生回数' },
   { title: 'フォロワー数', key: 'フォロワー数' },
 ]
+
+const toggleOrangeBorder = (item: TikTokPost) => {
+}
 </script>
 
 <style>

@@ -14,4 +14,5 @@ export interface TikTokPost {
     更新日: string;
     アイコン: string;
     isVisible: boolean;
+    isOrangeBorder: boolean 
   }
