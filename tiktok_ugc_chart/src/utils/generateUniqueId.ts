@@ -1,3 +1,7 @@
-export function generateUniqueId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+/**
+ * ランダムなユニークIDを生成する
+ * @returns ユニークID
+ */
+export const generateUniqueId = (): string => {
+  return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
 }

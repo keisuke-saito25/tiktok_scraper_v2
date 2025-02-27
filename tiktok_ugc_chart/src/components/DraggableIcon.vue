@@ -22,10 +22,8 @@ const props = defineProps<{
   isOrangeBorder: boolean 
 }>()
 
-// Emitted events定義
-const emit = defineEmits<{
-  (e: 'update:position', position: { x: number, y: number }): void
-}>()
+// Emits定義
+const emit = defineEmits(['update:position'])
 
 // アイコンの現在位置
 const position = ref<{ x: number, y: number }>(props.initialPosition || { x: 10, y: 10 })
