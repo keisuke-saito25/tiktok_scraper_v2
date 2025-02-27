@@ -204,6 +204,28 @@ const formatDateToYYYYMMDD = (dateStr: string): string => {
   return `${yyyy}${mm}${dd}`
 }
 
+const parsePostDate = (dateStr: string, toYear: number): string => {
+  // 正規表現でmm/ddまたはyyyy/mm/ddを判定
+  const mmddRegex = /^(\d{2})\/(\d{2})$/
+  const yyyymmddRegex = /^(\d{4})\/(\d{2})\/(\d{2})$/
+
+  if (yyyymmddRegex.test(dateStr)) {
+    // 既にyyyy/mm/dd形式の場合はそのまま返す
+    return dateStr
+  }
+
+  const mmddMatch = dateStr.match(mmddRegex)
+  if (mmddMatch) {
+    const month = mmddMatch[1]
+    const day = mmddMatch[2]
+    return `${toYear}/${month}/${day}`
+  }
+
+  // デフォルトで元の文字列を返す
+  return dateStr
+}
+
+
 // ファイル読み込み
 const handleFile = (file: File) => {
   const reader = new FileReader()
@@ -225,13 +247,18 @@ const handleFile = (file: File) => {
       // データの整形
       if (rawData.length > 1) {
         const headers: string[] = rawData[0] as string[]
+
+        // SongInfoマッピング（アイコンを除外）
         const data: SongInfo[] = rawData.slice(1)
           .filter(row => !isRowEmpty(row)) // 空の行を除外
-          .map((row) => { // SongInfoにマッピング
+          .map((row, rowIndex) => { // SongInfoにマッピング
             const rowData: Record<string, any> = {}
+
             headers.forEach((header, index) => {
-              rowData[header] = row[index]
+              const key = header.trim() !== '' ? header : undefined
+              if (key) rowData[key] = row[index]
             })
+
             return rowData as SongInfo
           })
 
@@ -240,8 +267,10 @@ const handleFile = (file: File) => {
         console.log("楽曲情報: ", songInfoData.value)
       }
 
-      // 「To」日付を yyyymmdd 形式に変換
+      // 「To」日付の処理
       if (filterTo.value) {
+        const toDate = new Date(filterTo.value)
+        const toYear = toDate.getFullYear()
         const toDateStr = formatDateToYYYYMMDD(filterTo.value)
         console.log(`フォーマットされたTo日付: ${toDateStr}`)
 
@@ -257,14 +286,29 @@ const handleFile = (file: File) => {
           if (postIdIndex === -1) {
             showError(`"投稿ID" 列が "${toDateStr}" シートに存在しません。`)
           } else {
+            // アイコン列のインデックスを固定で指定
+            const ICON_COLUMN_INDEX = 12 // M列
+
             // データ部分をフィルタリング
             const filteredToSheetData: TikTokPost[] = toSheetData.slice(1)
               .filter(row => row[postIdIndex] && row[postIdIndex].toString().trim() !== '')
               .map(row => {
                 const rowData: Record<string, any> = {}
+
                 toHeaders.forEach((header, index) => {
-                  rowData[header] = row[index]
+                  if (index === ICON_COLUMN_INDEX) {
+                    rowData['アイコン'] = row[index] // M列を 'アイコン' としてマッピング
+                  } else {
+                    const key = header.trim() !== '' ? header : undefined
+                    if (key) rowData[key] = row[index]
+                  }
                 })
+
+                // 投稿日のパースを追加
+                if (rowData['投稿日']) {
+                  rowData['投稿日'] = parsePostDate(rowData['投稿日'], toYear)
+                }
+
                 return {
                   ...rowData,
                   uniqueId: generateUniqueId(),
@@ -274,12 +318,13 @@ const handleFile = (file: File) => {
             
             console.log(`"${toDateStr}" シート: `, filteredToSheetData)
 
-            // filterFrom2とfilterTo2を使ってフィルタリング
+            // フィルタリング（From2とTo2）
             if (filterFrom2.value && filterTo2.value) {
               const fromDate2 = new Date(filterFrom2.value)
               const toDate2 = new Date(filterTo2.value)
 
               const furtherFilteredData = filteredToSheetData.filter(post => {
+                if (!post.投稿日) return false
                 const postDate = new Date(post.投稿日)
                 return postDate >= fromDate2 && postDate <= toDate2
               })

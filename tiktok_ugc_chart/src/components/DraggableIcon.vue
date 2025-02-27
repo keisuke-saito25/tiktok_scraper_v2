@@ -6,6 +6,7 @@
       :style="{ top: position.y + 'px', left: position.x + 'px' }"
       @mousedown="startDrag"
       @touchstart="startDrag"
+      referrerpolicy="no-referrer"
     />
   </template>
   

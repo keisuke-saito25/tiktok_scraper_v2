@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import { Chart, LineController, LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend } from 'chart.js'
 import type { ChartData, ChartOptions } from 'chart.js'
 import DraggableIcon from './DraggableIcon.vue'
@@ -144,7 +144,7 @@ const loadFollowerPostsSequentially = async () => {
   }
 }
 
-// 画像を並列でロードする関数
+// 画像を並列でロードする関数（必要に応じて使用）
 const loadFollowerPostsInParallel = async () => {
   const loadPromises = props.topFollowerPosts.map(async (post) => {
     await loadImage(post.アイコン)
@@ -153,12 +153,21 @@ const loadFollowerPostsInParallel = async () => {
   await Promise.all(loadPromises)
 }
 
+// 画像をロードする関数
 const loadImage = (src: string): Promise<void> => {
   return new Promise((resolve) => {
+    console.log(`画像ロード開始: ${src}`)
     const img = new Image()
+    img.crossOrigin = 'anonymous' 
     img.src = src
-    img.onload = () => resolve()
-    img.onerror = () => resolve() // エラー時も次に進む
+    img.onload = () => {
+      console.log(`画像ロード成功: ${src}`)
+      resolve()
+    }
+    img.onerror = (error) => {
+      console.error(`画像ロードエラー: ${src}`, error)
+      resolve() // エラー時も次に進む
+    }
   })
 }
 
@@ -174,21 +183,26 @@ watch(() => props.data, () => {
   renderChart()
 }, { deep: true })
 
-// topFollowerPostsが変更されたときに初期位置を設定
-watch(() => props.topFollowerPosts, (newPosts) => {
-  iconPositions.value = newPosts.map((_, index) => getInitialPosition(index))
-})
-watch(() => props.topFollowerPosts, (newPosts) => {
+// topFollowerPostsが変更されたときに初期位置を設定し、画像をロード
+watch(() => props.topFollowerPosts, async (newPosts) => {
+  // 初期位置を設定
   iconPositions.value = newPosts.map((post, index) => getInitialPosition(index))
-  loadedFollowerPosts.value = newPosts.filter(post => post.isVisible)
+
+  // ロード済みの投稿をリセット
+  loadedFollowerPosts.value = []
+
+  // 画像ロードをトリガー
+  await loadFollowerPostsSequentially()
 })
-// アイコン位置の更新ハンドラー
-const handlePositionUpdate = (uniqueId: string, newPosition: { x: number, y: number }) => {
-  const index = loadedFollowerPosts.value.findIndex(post => post.uniqueId === uniqueId)
-  if (index !== -1) {
-    iconPositions.value[index] = newPosition
-  }
-}
+
+	// アイコン位置の更新ハンドラー		
+	const handlePositionUpdate = (uniqueId: string, newPosition: { x: number, y: number }) => {		
+	const index = loadedFollowerPosts.value.findIndex(post => post.uniqueId === uniqueId)		
+	if (index !== -1) {		
+	iconPositions.value[index] = newPosition		
+	}		
+	}
+
 </script>
 
 <style scoped>
