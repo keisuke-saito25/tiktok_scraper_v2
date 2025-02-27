@@ -49,14 +49,39 @@
           </v-col>
         </v-row>
 
-        <!-- ファイルアップロードボタン -->
-        <v-row>
-          <v-col cols="12" sm="6" md="3">
+        <!-- ファイルアップロードボタンとエクスポートボタン -->
+        <v-row class="my-4">
+          <v-col cols="12" sm="6" md="3" class="d-flex">
             <FileUploadButton
               buttonLabel="Excelを読み込む"
               :disabled="!isFilterValid"
               @file-selected="handleFile"
             />
+            <!-- エクスポートボタンを追加 -->
+            <v-btn
+              class="ml-2"
+              color="primary"
+              :disabled="!filteredSongInfoData.length"
+              @click="handleExportChart"
+            >
+              チャートを保存
+            </v-btn>
+            <v-btn
+              class="ml-2"
+              color="primary"
+              :disabled="!filteredSongInfoData.length"
+              @click="handleExportIcons"
+            >
+              アイコンを保存
+            </v-btn>
+            <v-btn
+              class="ml-2"
+              color="primary"
+              :disabled="!filteredSongInfoData.length"
+              @click="handleExportChartAndIcons"
+            >
+              全体を保存
+            </v-btn>
           </v-col>
         </v-row>
 
@@ -64,10 +89,11 @@
         <v-row>
           <v-col cols="12">
             <UGCChart 
+              ref="ugcChartRef"
               :data="filteredSongInfoData" 
               :top-follower-posts="uniqueAccounts.filter(account => account.isVisible)" 
               v-if="filteredSongInfoData.length > 0" 
-            /> 
+            />  
           </v-col>
         </v-row>
 
@@ -422,6 +448,28 @@ const isFilterValid = computed(() => {
   )
 })
 
+// エクスポートボタン用のref
+const ugcChartRef = ref<InstanceType<typeof UGCChart> | null>(null)
+
+// エクスポートハンドラー
+const handleExportChart = () => {
+  if (ugcChartRef.value) {
+    ugcChartRef.value.exportChartAsImage()
+  }
+}
+
+const handleExportIcons = () => {
+  if (ugcChartRef.value) {
+    ugcChartRef.value.exportIconsAsImage()
+  }
+}
+
+const handleExportChartAndIcons = () => {
+  if (ugcChartRef.value) {
+    ugcChartRef.value.exportChartAndIconsAsImage()
+  }
+}
+
 const filteredSongInfoData = ref<SongInfo[]>([])
 
 const tableHeaders = [
@@ -442,4 +490,7 @@ const toggleOrangeBorder = (item: TikTokPost) => {
 </script>
 
 <style>
+.ml-2 {
+  margin-left: 8px;
+}
 </style>
