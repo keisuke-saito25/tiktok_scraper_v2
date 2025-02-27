@@ -55,8 +55,8 @@ const getInitialPosition = (uniqueId: string, index: number) => {
   const spacing = iconSize + padding // スペーシング
 
   const position = {
-    x: padding + (index % 10) * spacing,
-    y: padding + Math.floor(index / 10) * spacing
+    x: padding + (index % 8) * spacing,
+    y: padding + Math.floor(index / 8) * spacing
   }
 
   // 初期位置を保存

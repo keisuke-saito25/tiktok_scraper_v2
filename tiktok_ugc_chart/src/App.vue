@@ -319,6 +319,11 @@ const handleFile = (file: File) => {
         // フィルタ適用
         applyFilters()
         console.log("楽曲情報: ", filteredSongInfoData.value)
+
+         // filterFrom2 が空の場合のみ filterFrom の値を設定
+         if (!filterFrom2.value) {
+          filterFrom2.value = filterFrom.value
+        }
       }
 
       // 「To」日付の処理
