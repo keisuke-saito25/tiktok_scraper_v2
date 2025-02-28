@@ -27,7 +27,6 @@ import psutil
 import pytz
 import json
 import shutil
-# os.chdir(os.path.dirname(sys.argv[0]))
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # ログ設定
@@ -160,15 +159,40 @@ def create_backup_if_exists(excel_filename):
     # フォルダが存在しない場合は作成
     if not os.path.exists(backup_dir):
         os.makedirs(backup_dir)
-    
+
     # ファイルが存在する場合はバックアップを作成
     if os.path.exists(excel_filename):
         try:
-            backup_path = os.path.join(backup_dir, os.path.basename(excel_filename))
+            # 現在の日付を取得してフォーマット（例：20231007）
+            current_date = datetime.now().strftime('%Y%m%d')
+            # 元のファイル名と拡張子を取得
+            base_filename = os.path.basename(excel_filename)
+            name, ext = os.path.splitext(base_filename)
+            # バックアップファイル名を作成（例：filename_20231007.xlsx）
+            backup_filename = f"{name}_{current_date}{ext}"
+            backup_path = os.path.join(backup_dir, backup_filename)
+            # ファイルをコピー
             shutil.copy2(excel_filename, backup_path)
             logging.info(f'バックアップが作成されました: {backup_path}')
+            # 古いバックアップを削除
+            delete_old_backups(backup_dir, name, ext)
         except Exception as e:
             logging.error(f'バックアップ作成中にエラーが発生しました: {e}') 
+
+def delete_old_backups(backup_dir, name, ext):
+    now = time.time()
+    for filename in os.listdir(backup_dir):
+        if filename.startswith(name) and filename.endswith(ext):
+            file_path = os.path.join(backup_dir, filename)
+            # ファイルの最終更新日時を取得
+            file_mtime = os.path.getmtime(file_path)
+            # 7日（604800秒）以上前なら削除
+            if file_mtime < now - 7 * 86400:
+                try:
+                    os.remove(file_path)
+                    logging.info(f'古いバックアップファイルを削除しました: {file_path}')
+                except Exception as e:
+                    logging.error(f'古いバックアップファイルの削除中にエラーが発生しました: {e}')
 
 def function1(save_path, max_items, song_urls, headless=False):
     logging.info('#機能1 処理実行開始')
@@ -316,7 +340,7 @@ def create_or_clear_date_sheet(workbook):
         sheet.column_dimensions['I'].width = 10  # 再生回数
         sheet.column_dimensions['J'].width = 10  # フォロワー数
         sheet.column_dimensions['K'].width = 26  # 動画リンク
-        sheet.column_dimensions['L'].width = 16  # 更新日
+        sheet.column_dimensions['L'].width = 18  # 更新日
     else:
         sheet = workbook[date_sheet_name]
         # 既存のデータ行（2行目以降）を削除
@@ -452,7 +476,7 @@ def function2(save_path, song_urls, headless=False):
 
         song_operations_count = 0  # 各曲ごとに取得した件数をカウント
 
-        for row in sheet.iter_rows(min_row=2, max_col=12):
+        for row in sheet.iter_rows(min_row=2, max_col=13):
             if all(cell.value for cell in row[:10]):
                 continue
 
@@ -542,11 +566,53 @@ def function2(save_path, song_urls, headless=False):
                 break
     driver.quit()
     logging.info('#機能2 処理実行停止')
-        
+
+def parse_date_posted(date_posted_str, update_datetime):
+    date_posted_str = date_posted_str.strip()
+
+    # 'n日前' の形式
+    m = re.match(r'(\d+)日前', date_posted_str)
+    if m:
+        days_ago = int(m.group(1))
+        date_posted = update_datetime - timedelta(days=days_ago)
+        return date_posted.strftime('%m/%d')
+
+    # 'n時間前' の形式
+    m = re.match(r'(\d+)時間前', date_posted_str)
+    if m:
+        hours_ago = int(m.group(1))
+        date_posted = update_datetime - timedelta(hours=hours_ago)
+        return date_posted.strftime('%m/%d')
+
+    # 'n週間前' の形式
+    m = re.match(r'(\d+)週間前', date_posted_str)
+    if m:
+        weeks_ago = int(m.group(1))
+        date_posted = update_datetime - timedelta(weeks=weeks_ago)
+        return date_posted.strftime('%m/%d')
+
+    # 'mm-dd' の形式
+    m = re.match(r'(\d{1,2})-(\d{1,2})', date_posted_str)
+    if m:
+        month = int(m.group(1))
+        day = int(m.group(2))
+        return f'{month:02}/{day:02}'
+
+    # 'yyyy-mm-dd' の形式
+    m = re.match(r'(\d{4})-(\d{1,2})-(\d{1,2})', date_posted_str)
+    if m:
+        year = int(m.group(1))
+        month = int(m.group(2))
+        day = int(m.group(3))
+        return f'{year}/{month:02}/{day:02}'
+
+    # その他の形式はそのまま返す
+    return date_posted_str
+
 def write_video_data_to_row(sheet, row, data):
-    keys = ['投稿ID', '投稿日', 'アカウント名', 'ニックネーム', 'いいね数', 'コメント数', '保存数', 'シェア数', '再生回数', 'フォロワー数', '動画リンク(URL)', '更新日']
+    keys = ['投稿ID', '投稿日', 'アカウント名', 'ニックネーム', 'いいね数', 'コメント数', '保存数', 'シェア数', '再生回数', 'フォロワー数', '動画リンク(URL)', '更新日', 'アバターURL']
     for i, key in enumerate(keys):
-        value = data.get(key, None)
+        value = data.get(key)
         row[i].value = value 
 
 # 動画のデータを抽出
@@ -567,6 +633,12 @@ def extract_video_data(driver, original_window, follower_window_handle):
         # 日付とニックネーム
         nickname, date_posted = extract_nickname_and_date(driver)
 
+        # '更新日' を取得
+        update_datetime = datetime.now()
+
+        # 'date_posted' をパースして指定の形式に変換
+        date_posted = parse_date_posted(date_posted, update_datetime)
+
         data['ニックネーム'] = nickname
         data['投稿日'] = date_posted
 
@@ -586,13 +658,15 @@ def extract_video_data(driver, original_window, follower_window_handle):
 
         data['動画リンク(URL)'] = current_url
         data['更新日'] = datetime.today().strftime('%Y/%m/%d %H:%M')
-
+        img_element = driver.find_element(By.XPATH, '//img[@alt=""]')
+        avatar_url = img_element.get_attribute('src')
+        data['アバターURL'] = avatar_url
     except Exception as e:
         logging.error(f'動画データの抽出中にエラーが発生しました: {e}', exc_info=True)
         # データが取得できなかった場合は空欄にする
         data = {key: '' for key in ['投稿ID', '投稿日', 'アカウント名', 'ニックネーム',
                                     'いいね数', 'コメント数', '保存数', 'シェア数',
-                                    '再生回数', 'フォロワー数', '動画リンク(URL)', '更新日']}
+                                    '再生回数', 'フォロワー数', '動画リンク(URL)', '更新日', 'アバターURL']}
     return data
 
 def handle_photo_page_interference(driver):
