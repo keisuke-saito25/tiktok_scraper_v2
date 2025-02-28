@@ -1,6 +1,6 @@
 <template>
   <div>
-    <v-row>
+    <v-row class="justify-center align-center">
       <v-col cols="12" sm="6" md="3">
         <FileUploadButton
           buttonLabel="Excelを読み込む"
