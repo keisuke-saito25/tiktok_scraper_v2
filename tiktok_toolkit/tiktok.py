@@ -212,8 +212,27 @@ def function1(save_path, max_items, song_urls, headless=False):
         try:
             sanitized_name = sanitize_filename(song_name)
             excel_filename = os.path.join(save_path, f'{sanitized_name}.xlsx')
+
+            # "アイコン"フォルダを作成（保存先と同じディレクトリ）
+            icons_dir = os.path.join(save_path, 'アイコン')
+            if not os.path.exists(icons_dir):
+                os.makedirs(icons_dir)
+                logging.info(f'"アイコン"フォルダを作成しました: {icons_dir}')
+
             # 既存Excelファイルのバックアップ作成
             create_backup_if_exists(excel_filename)
+
+            # ファイルが存在しない場合は新規作成
+            if not os.path.exists(excel_filename):
+                workbook = create_excel_file(excel_filename)
+            else:
+                workbook = load_workbook(excel_filename)
+                # "ユーザーアイコン"シートが存在しない場合は作成
+                if 'ユーザーアイコン' not in workbook.sheetnames:
+                    icon_sheet = workbook.create_sheet(title='ユーザーアイコン')
+                    icon_sheet.append(['アカウント名', 'アイコンパス'])
+                    icon_sheet.column_dimensions['A'].width = 25  # アカウント名
+                    icon_sheet.column_dimensions['B'].width = 40  # アイコンパス
             
             workbook = load_workbook(excel_filename) if os.path.exists(excel_filename) else create_excel_file(excel_filename)
 
@@ -275,6 +294,19 @@ def create_excel_file(filename):
     sheet.column_dimensions['B'].width = 20  # 楽曲URL
     sheet.column_dimensions['C'].width = 18  # 日付
     sheet.column_dimensions['D'].width = 9   # 総UGC数
+
+    # "ユーザーアイコン"シートを作成
+    icon_sheet = workbook.create_sheet(title='ユーザーアイコン')
+    icon_sheet.append(['アカウント名', 'アイコンパス'])
+
+    # ユーザーアイコンシートの列幅を設定
+    icon_sheet.column_dimensions['A'].width = 25 # アカウント名
+    icon_sheet.column_dimensions['B'].width = 40 # アイコンパス
+
+    # "アイコン"フォルダを作成
+    icons_dir = os.path.join(os.path.dirname(filename), 'アイコン')
+    if not os.path.exists(icons_dir):
+        os.makedirs(icons_dir)
 
     workbook.save(filename)
     return workbook
@@ -449,6 +481,12 @@ def function2(save_path, song_urls, headless=False):
     follower_window_handle = driver.window_handles[-1]
 
     operations_count = 0
+
+    # アイコンフォルダを確認し、なければ作成
+    icons_dir = os.path.join(save_path, 'アイコン')
+    if not os.path.exists(icons_dir):
+        os.makedirs(icons_dir)
+        logging.info(f'"アイコン"フォルダを作成しました: {icons_dir}')
     
     for song_name, _ in song_urls:
         if stop_flag.is_set():
@@ -465,6 +503,15 @@ def function2(save_path, song_urls, headless=False):
         workbook = load_workbook(excel_filename)
         today_str = datetime.today().strftime('%Y%m%d')
         
+        # ユーザーアイコンシートの確認と作成
+        if 'ユーザーアイコン' not in workbook.sheetnames:
+            icon_sheet = workbook.create_sheet(title='ユーザーアイコン')
+            icon_sheet.append(['アカウント名', 'アイコンパス'])
+            icon_sheet.column_dimensions['A'].width = 25  # アカウント名
+            icon_sheet.column_dimensions['B'].width = 40  # アイコンパス
+        else:
+            icon_sheet = workbook['ユーザーアイコン']
+
         if today_str not in workbook.sheetnames:
             logging.error(f'シートが存在しません: {today_str}')
             continue
@@ -475,6 +522,14 @@ def function2(save_path, song_urls, headless=False):
         total_urls_count = sum(1 for row in sheet.iter_rows(min_row=2, min_col=11, max_col=11) if row[0].value)
 
         song_operations_count = 0  # 各曲ごとに取得した件数をカウント
+
+        # ユーザーアイコン情報を保持する辞書
+        account_icons = {}
+
+        # 既存のアカウント名とアイコンパスをロード
+        for row in icon_sheet.iter_rows(min_row=2):
+            if row[0].value and row[1].value:
+                account_icons[row[0].value] = row[1].value
 
         for row in sheet.iter_rows(min_row=2, max_col=13):
             if all(cell.value for cell in row[:10]):
@@ -491,6 +546,34 @@ def function2(save_path, song_urls, headless=False):
 
             data = extract_video_data(driver, original_window, follower_window_handle)
             write_video_data_to_row(sheet, row, data)
+
+             # アイコン処理
+            account_name = data.get('アカウント名')
+            avatar_url = data.get('アバターURL')
+            
+            if account_name and avatar_url and account_name not in account_icons:
+                try:
+                    # アイコン画像をダウンロード
+                    icon_filename = f"{sanitize_filename(account_name)}.jpg" # アカウント名.jpg
+                    icon_path = os.path.join(icons_dir, icon_filename)
+
+                    # 絶対パスを設定
+                    absolute_path = os.path.abspath(icon_path)
+                    
+                    # requestsを使ってダウンロード
+                    import requests
+                    response = requests.get(avatar_url, stream=True)
+                    if response.status_code == 200:
+                        with open(icon_path, 'wb') as f:
+                            for chunk in response.iter_content(1024):
+                                f.write(chunk)
+
+                        # 絶対パスを記録
+                        account_icons[account_name] = absolute_path
+
+                        logging.info(f'アイコンを保存しました: {account_name} -> {absolute_path}')
+                except Exception as e:
+                    logging.error(f'アイコン保存中にエラーが発生しました: {e}')
 
             operations_count += 1
             song_operations_count += 1  # 各曲ごとの取得件数をインクリメント
@@ -549,7 +632,16 @@ def function2(save_path, song_urls, headless=False):
         #     write_video_data_to_row(sheet, row, data)
 
         #     operations_count += 1
-            
+        
+        # アカウントアイコン情報の更新
+        # 現在のシートをクリア（ヘッダー行は残す）
+        if icon_sheet.max_row > 1:
+            icon_sheet.delete_rows(2, icon_sheet.max_row - 1)
+        
+        # 新しいデータを書き込み
+        for account_name, icon_path in account_icons.items():
+            icon_sheet.append([account_name, icon_path])
+
         # Log the final count for the current song
         logging.info(f'{song_name} - 最終取得件数: {song_operations_count}, 総URL件数: {total_urls_count}')
 
