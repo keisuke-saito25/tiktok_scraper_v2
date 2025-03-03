@@ -112,7 +112,8 @@ import {
   extractTikTokPostData, 
   filterPostsByDateRange, 
   getUniqueAccountsMap, 
-  getTopFollowerPosts 
+  getTopFollowerPosts,
+  extractUserIconMap
 } from './utils/fileHandler'
 import { formatDateToYYYYMMDD, isValidDate } from './utils/dateUtils'
 
@@ -123,6 +124,7 @@ const activeTab = ref('ugc-chart')
 const songInfoData = ref<SongInfo[]>([])
 const uniqueAccounts = ref<TikTokPost[]>([])
 const filteredSongInfoData = ref<SongInfo[]>([])
+const userIconMap = ref<Map<string, string>>(new Map())
 
 // フィルタ用の日付
 const filterFrom = ref<string>('')
@@ -189,6 +191,36 @@ const handleFile = (file: File) => {
       const data = new Uint8Array(e.target?.result as ArrayBuffer)
       const workbook = XLSX.read(data, { type: 'array' })
 
+      // ユーザーアイコンシートの処理
+      console.log('Excelの読み込みが完了しました。シート一覧:', workbook.SheetNames);
+      
+      const userIconSheetName = 'ユーザーアイコン'
+      if (workbook.SheetNames.includes(userIconSheetName)) {
+        console.log(`"${userIconSheetName}"シートが見つかりました。データを読み込みます。`);
+        const userIconSheet = workbook.Sheets[userIconSheetName]
+        
+        try {
+          // シートの内容を確認用に出力
+          const rawData = XLSX.utils.sheet_to_json(userIconSheet, { header: 1 });
+          console.log('ユーザーアイコンシートの生データ（先頭5行）:', rawData.slice(0, 5));
+          
+          userIconMap.value = extractUserIconMap(userIconSheet)
+          console.log(`${userIconMap.value.size}件のユーザーアイコンデータを読み込みました。`);
+          
+          // いくつかのアカウント名とパスをサンプル表示
+          if (userIconMap.value.size > 0) {
+            const sampleEntries = Array.from(userIconMap.value.entries()).slice(0, 3);
+            console.log('アイコンマップのサンプル:', sampleEntries);
+          }
+        } catch (error) {
+          console.error('ユーザーアイコンシートの処理中にエラーが発生しました:', error);
+          userIconMap.value = new Map();
+        }
+      } else {
+        console.warn(`シート "${userIconSheetName}" が見つかりません。アイコンは従来の方法で取得します。`);
+        userIconMap.value = new Map();
+      }
+
       // 楽曲情報シート処理
       const mainSheetName = '楽曲情報'
       if (!workbook.SheetNames.includes(mainSheetName)) {
@@ -232,15 +264,30 @@ const processTikTokData = (workbook: XLSX.WorkBook) => {
         const toSheet = workbook.Sheets[toDateStr]
         
         try {
-          // TikTokポストの抽出
-          const tikTokPosts = extractTikTokPostData(toSheet, toDate)
+          console.log(`"${toDateStr}"シートからTikTokポストデータを抽出します。`);
+          console.log(`ユーザーアイコンマップには${userIconMap.value.size}件のデータがあります。`);
+          
+          // TikTokポストの抽出（ユーザーアイコンマップを渡す）
+          const tikTokPosts = extractTikTokPostData(toSheet, toDate, userIconMap.value)
+          console.log(`${tikTokPosts.length}件のTikTokポストデータを抽出しました。`);
+          
+          // 最初の数件のアイコンパスを確認
+          if (tikTokPosts.length > 0) {
+            const samplePosts = tikTokPosts.slice(0, 3);
+            console.log('TikTokポストサンプル（アイコンパス確認用）:', samplePosts.map(post => ({
+              アカウント名: post.アカウント名,
+              アイコン: post.アイコン
+            })));
+          }
           
           // 日付範囲でフィルタリング
           if (filterFrom2.value && filterTo.value) {
             const fromDate2 = new Date(filterFrom2.value)
             const toDate2 = new Date(filterTo.value)
             
+            console.log(`日付範囲でフィルタリング: ${fromDate2.toISOString()} から ${toDate2.toISOString()}`);
             const filteredPosts = filterPostsByDateRange(tikTokPosts, fromDate2, toDate2)
+            console.log(`フィルタリング後: ${filteredPosts.length}件のデータが残りました。`);
             
             // ユニークなアカウントを取得
             const uniqueAccountsMap = getUniqueAccountsMap(filteredPosts)

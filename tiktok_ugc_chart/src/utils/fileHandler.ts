@@ -48,40 +48,95 @@ export const extractSongInfoData = (worksheet: XLSX.WorkSheet): SongInfo[] => {
 }
 
 /**
- * 指定された日付のシートからTikTokポストデータを抽出
- * @param worksheet ワークシート
+ * ユーザーアイコンシートからアイコンパスのマップを作成
+ * @param worksheet ユーザーアイコンシート
+ * @returns アカウント名をキー、アイコンパスを値とするマップ
+ */
+export const extractUserIconMap = (worksheet: XLSX.WorkSheet): Map<string, string> => {
+  console.log('extractUserIconMap: ユーザーアイコンマップの抽出を開始します。');
+  const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
+  
+  console.log(`extractUserIconMap: 読み込んだデータ行数: ${rawData.length}`);
+  
+  if (rawData.length <= 1) {
+    console.warn('extractUserIconMap: ユーザーアイコンシートにデータがありません。');
+    return new Map()
+  }
+  
+  const headers: string[] = rawData[0] as string[]
+  console.log('extractUserIconMap: ヘッダー行:', headers);
+  
+  const accountNameIndex = headers.findIndex(h => h === 'アカウント名')
+  const iconPathIndex = headers.findIndex(h => h === 'アイコンパス')
+  
+  console.log(`extractUserIconMap: アカウント名の列インデックス: ${accountNameIndex}, アイコンパスの列インデックス: ${iconPathIndex}`);
+  
+  if (accountNameIndex === -1 || iconPathIndex === -1) {
+    console.error('extractUserIconMap: 必要なヘッダーが見つかりません。ヘッダー行を確認してください。');
+    throw new Error('ユーザーアイコンシートに必要なヘッダー（アカウント名、アイコンパス）が見つかりません。')
+  }
+  
+  const iconMap = new Map<string, string>()
+  
+  rawData.slice(1)
+    .filter(row => !isRowEmpty(row) && row[accountNameIndex] && row[iconPathIndex])
+    .forEach((row, index) => {
+      const accountName = row[accountNameIndex].toString().trim()
+      const iconPath = row[iconPathIndex].toString().trim()
+      if (accountName && iconPath) {
+        iconMap.set(accountName, iconPath)
+        if (index < 5) { // 最初の5行だけログに表示
+          console.log(`extractUserIconMap: マッピング追加 - ${accountName} => ${iconPath}`);
+        }
+      }
+    })
+  
+  console.log(`extractUserIconMap: 合計${iconMap.size}件のアイコンマッピングを作成しました。`);
+  return iconMap
+}
+
+/**
+ * 指定された日付のシートからTikTokポストデータを抽出し、ユーザーアイコンマップを適用
+ * @param worksheet 日付シート
  * @param toDate 日付
+ * @param userIconMap ユーザーアイコンマップ（省略可能）
  * @returns 抽出したTikTokポストの配列
  */
-export const extractTikTokPostData = (worksheet: XLSX.WorkSheet, toDate: Date): TikTokPost[] => {
+export const extractTikTokPostData = (
+  worksheet: XLSX.WorkSheet, 
+  toDate: Date,
+  userIconMap?: Map<string, string>
+): TikTokPost[] => {
   const toSheetData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
   
   // ヘッダーを取得
   const toHeaders: string[] = toSheetData[0] as string[]
   
-  // 投稿IDのインデックスを取得
+  // 投稿IDとアカウント名のインデックスを取得
   const postIdIndex = toHeaders.indexOf('投稿ID')
+  const accountNameIndex = toHeaders.indexOf('アカウント名')
+  
   if (postIdIndex === -1) {
     throw new Error('投稿ID列が見つかりません。')
   }
   
-  // アイコン列のインデックスを固定で指定
-  const ICON_COLUMN_INDEX = 12 // M列
+  if (accountNameIndex === -1) {
+    throw new Error('アカウント名列が見つかりません。')
+  }
+  
   const toYear = toDate.getFullYear()
   
   // データ部分をフィルタリング
-  const tikTokPosts: TikTokPost[] = toSheetData.slice(1)
+  const posts: TikTokPost[] = [];
+  
+  toSheetData.slice(1)
     .filter(row => row[postIdIndex] && row[postIdIndex].toString().trim() !== '')
-    .map(row => {
+    .forEach(row => {
       const rowData: Record<string, any> = {}
       
       toHeaders.forEach((header, index) => {
-        if (index === ICON_COLUMN_INDEX) {
-          rowData['アイコン'] = row[index] // M列を 'アイコン' としてマッピング
-        } else {
-          const key = header.trim() !== '' ? header : undefined
-          if (key) rowData[key] = row[index]
-        }
+        const key = header.trim() !== '' ? header : undefined
+        if (key) rowData[key] = row[index]
       })
       
       // 投稿日のパースを追加
@@ -89,15 +144,35 @@ export const extractTikTokPostData = (worksheet: XLSX.WorkSheet, toDate: Date): 
         rowData['投稿日'] = parsePostDate(rowData['投稿日'], toYear)
       }
       
-      return {
+      // アカウント名からアイコンパスを取得
+      const accountName = rowData['アカウント名']
+      if (userIconMap && accountName) {
+        if (userIconMap.has(accountName)) {
+          const iconPath = userIconMap.get(accountName);
+          rowData['アイコン'] = iconPath;
+          // 最初の数件だけログに表示
+          if (posts.length < 3) {
+            console.log(`アイコンパスを設定しました: ${accountName} => ${iconPath}`);
+          }
+        } else {
+          // 最初の数件だけログに表示
+          if (posts.length < 3) {
+            console.log(`警告: アカウント "${accountName}" のアイコンパスが見つかりません。`);
+          }
+        }
+      }
+      
+      const post = {
         ...rowData,
         uniqueId: generateUniqueId(),
         isVisible: false, // 初期状態は非表示
         isOrangeBorder: false,
-      } as TikTokPost
+      } as TikTokPost;
+      
+      posts.push(post);
     })
   
-  return tikTokPosts
+  return posts
 }
 
 /**

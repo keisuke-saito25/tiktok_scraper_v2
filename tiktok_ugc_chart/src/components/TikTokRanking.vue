@@ -109,7 +109,7 @@ import FileUploadButton from './FileUploadButton.vue'
 import { formatDateToYYYYMMDD, formatDateToYYYYMMDDWithSlash } from '../utils/dateUtils'
 import type { TikTokPost } from '../types/TikTokPost'
 import type { SongInfo } from '../types/SongInfo'
-import { extractTikTokPostData, extractSongInfoData } from '../utils/fileHandler'
+import { extractTikTokPostData, extractSongInfoData, extractUserIconMap } from '../utils/fileHandler'
 import html2canvas from 'html2canvas'
 
 // ランキングデータの構造
@@ -129,6 +129,7 @@ const rankingGenerated = ref(false)
 const workbook = ref<XLSX.WorkBook | null>(null)
 const currentRanking = ref<RankingData | null>(null)
 const currentSongTitle = ref<string>('')
+const userIconMap = ref<Map<string, string>>(new Map())
 
 // ランキング種類のオプション
 const rankingTypes = [
@@ -165,6 +166,36 @@ const handleFile = (file: File) => {
     try {
       const data = new Uint8Array(e.target?.result as ArrayBuffer)
       workbook.value = XLSX.read(data, { type: 'array' })
+      
+      // ユーザーアイコンシートからアイコンパスのマップを取得
+      console.log('TikTokRanking: Excelの読み込みが完了しました。シート一覧:', workbook.value.SheetNames);
+      
+      const userIconSheetName = 'ユーザーアイコン'
+      if (workbook.value.SheetNames.includes(userIconSheetName)) {
+        console.log(`TikTokRanking: "${userIconSheetName}"シートが見つかりました。データを読み込みます。`);
+        const userIconSheet = workbook.value.Sheets[userIconSheetName]
+        
+        try {
+          // シートの内容を確認用に出力
+          const rawData = XLSX.utils.sheet_to_json(userIconSheet, { header: 1 });
+          console.log('TikTokRanking: ユーザーアイコンシートの生データ（先頭5行）:', rawData.slice(0, 5));
+          
+          userIconMap.value = extractUserIconMap(userIconSheet)
+          console.log(`TikTokRanking: ${userIconMap.value.size}件のユーザーアイコンデータを読み込みました。`);
+          
+          // いくつかのアカウント名とパスをサンプル表示
+          if (userIconMap.value.size > 0) {
+            const sampleEntries = Array.from(userIconMap.value.entries()).slice(0, 3);
+            console.log('TikTokRanking: アイコンマップのサンプル:', sampleEntries);
+          }
+        } catch (error) {
+          console.error('TikTokRanking: ユーザーアイコンシートの処理中にエラーが発生しました:', error);
+          userIconMap.value = new Map();
+        }
+      } else {
+        console.warn(`TikTokRanking: シート "${userIconSheetName}" が見つかりません。アイコンは従来の方法で取得します。`);
+        userIconMap.value = new Map();
+      }
       
       // 楽曲情報シートのデータを読み込む
       const mainSheetName = '楽曲情報'
@@ -220,8 +251,21 @@ const generateRanking = () => {
     const sheet = workbook.value.Sheets[dateStr]
     const date = new Date(selectedDate.value)
     
-    // TikTokポストの抽出
-    tikTokPosts.value = extractTikTokPostData(sheet, date)
+    console.log(`TikTokRanking: "${dateStr}"シートからTikTokポストデータを抽出します。`);
+    console.log(`TikTokRanking: ユーザーアイコンマップには${userIconMap.value.size}件のデータがあります。`);
+    
+    // TikTokポストの抽出（ユーザーアイコンマップを渡す）
+    tikTokPosts.value = extractTikTokPostData(sheet, date, userIconMap.value)
+    console.log(`TikTokRanking: ${tikTokPosts.value.length}件のTikTokポストデータを抽出しました。`);
+    
+    // 最初の数件のアイコンパスを確認
+    if (tikTokPosts.value.length > 0) {
+      const samplePosts = tikTokPosts.value.slice(0, 3);
+      console.log('TikTokRanking: TikTokポストサンプル（アイコンパス確認用）:', samplePosts.map(post => ({
+        アカウント名: post.アカウント名,
+        アイコン: post.アイコン
+      })));
+    }
     
     // 該当日付の楽曲名を取得
     const songTitle = getSongForDate(selectedDate.value)
@@ -331,7 +375,7 @@ const removeDuplicateUsers = (posts: TikTokPost[]): TikTokPost[] => {
   return Array.from(uniqueUsers.values())
 }
 
-// ランキング画像のエクスポート処理を修正
+// ランキング画像のエクスポート処理
 const exportRanking = async () => {
   if (!rankingContainer.value || !currentRanking.value) {
     showError('ランキングコンテナが見つかりません。')
