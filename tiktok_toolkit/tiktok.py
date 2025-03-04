@@ -27,7 +27,9 @@ import psutil
 import pytz
 import json
 import shutil
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+import requests
+# os.chdir(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(os.path.dirname(sys.argv[0]))
 
 # ログ設定
 logging.basicConfig(
@@ -213,11 +215,11 @@ def function1(save_path, max_items, song_urls, headless=False):
             sanitized_name = sanitize_filename(song_name)
             excel_filename = os.path.join(save_path, f'{sanitized_name}.xlsx')
 
-            # "アイコン"フォルダを作成（保存先と同じディレクトリ）
-            icons_dir = os.path.join(save_path, 'アイコン')
-            if not os.path.exists(icons_dir):
-                os.makedirs(icons_dir)
-                logging.info(f'"アイコン"フォルダを作成しました: {icons_dir}')
+            # "images"フォルダを作成（実行ファイルと同じディレクトリ）
+            images_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
+            if not os.path.exists(images_dir):
+                os.makedirs(images_dir)
+                logging.info(f'"images"フォルダを作成しました: {images_dir}')
 
             # 既存Excelファイルのバックアップ作成
             create_backup_if_exists(excel_filename)
@@ -303,10 +305,11 @@ def create_excel_file(filename):
     icon_sheet.column_dimensions['A'].width = 25 # アカウント名
     icon_sheet.column_dimensions['B'].width = 40 # アイコンパス
 
-    # "アイコン"フォルダを作成
-    icons_dir = os.path.join(os.path.dirname(filename), 'アイコン')
-    if not os.path.exists(icons_dir):
-        os.makedirs(icons_dir)
+    # "images"フォルダを作成（実行ファイルと同じディレクトリ）
+    images_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
+    if not os.path.exists(images_dir):
+        os.makedirs(images_dir)
+        logging.info(f'"images"フォルダを作成しました: {images_dir}')
 
     workbook.save(filename)
     return workbook
@@ -483,10 +486,10 @@ def function2(save_path, song_urls, headless=False):
     operations_count = 0
 
     # アイコンフォルダを確認し、なければ作成
-    icons_dir = os.path.join(save_path, 'アイコン')
-    if not os.path.exists(icons_dir):
-        os.makedirs(icons_dir)
-        logging.info(f'"アイコン"フォルダを作成しました: {icons_dir}')
+    images_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
+    if not os.path.exists(images_dir):
+        os.makedirs(images_dir)
+        logging.info(f'"images"フォルダを作成しました: {images_dir}')
     
     for song_name, _ in song_urls:
         if stop_flag.is_set():
@@ -555,23 +558,22 @@ def function2(save_path, song_urls, headless=False):
                 try:
                     # アイコン画像をダウンロード
                     icon_filename = f"{sanitize_filename(account_name)}.jpg" # アカウント名.jpg
-                    icon_path = os.path.join(icons_dir, icon_filename)
+                    icon_path = os.path.join(images_dir, icon_filename)
 
-                    # 絶対パスを設定
-                    absolute_path = os.path.abspath(icon_path)
+                    # 相対パスを設定（imagesフォルダ名とファイル名のみ）
+                    relative_path = f"images/{icon_filename}"
                     
                     # requestsを使ってダウンロード
-                    import requests
                     response = requests.get(avatar_url, stream=True)
                     if response.status_code == 200:
                         with open(icon_path, 'wb') as f:
                             for chunk in response.iter_content(1024):
                                 f.write(chunk)
 
-                        # 絶対パスを記録
-                        account_icons[account_name] = absolute_path
+                        # 相対パスを記録
+                        account_icons[account_name] = relative_path
 
-                        logging.info(f'アイコンを保存しました: {account_name} -> {absolute_path}')
+                        logging.info(f'アイコンを保存しました: {account_name} -> {relative_path}')
                 except Exception as e:
                     logging.error(f'アイコン保存中にエラーが発生しました: {e}')
 
