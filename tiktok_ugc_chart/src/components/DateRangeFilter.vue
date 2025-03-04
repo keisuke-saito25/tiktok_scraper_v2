@@ -2,7 +2,7 @@
     <v-row align="center" justify="start" class="my-4" spacing="4">
       <v-col cols="12" sm="6" md="3">
         <v-text-field
-          label="From"
+          label="チャート表示開始日"
           type="date"
           v-model="from"
           outlined
@@ -14,7 +14,7 @@
       </v-col>
       <v-col cols="12" sm="6" md="3">
         <v-text-field
-          label="To"
+          label="チャート表示終了日"
           type="date"
           v-model="to"
           outlined
@@ -27,7 +27,7 @@
   
       <v-col cols="12" sm="6" md="3">
         <v-text-field
-          label="From 2"
+          label="アイコン表示開始日"
           type="date"
           v-model="from2"
           outlined
@@ -38,7 +38,7 @@
       </v-col>
       <v-col cols="12" sm="6" md="3">
         <v-text-field
-          label="To 2"
+          label="アイコン表示終了日"
           type="date"
           :model-value="to"
           outlined
@@ -83,7 +83,7 @@
   // FromがToより前または同じであることを確認するルール
   const fromBeforeTo = () => {
     if (from.value && to.value) {
-      return new Date(from.value) <= new Date(to.value) || 'Fromの日付はToより前または同じでなければなりません。'
+      return new Date(from.value) <= new Date(to.value) || 'チャート表示開始日はチャート表示終了日より前または同じでなければなりません。'
     }
     return true
   }
@@ -98,7 +98,7 @@
     },
     () => {
       if (from2.value) {
-        return new Date(from2.value) <= new Date(to2.value) || 'From 2の日付はTo 2より前または同じでなければなりません。'
+        return new Date(from2.value) <= new Date(to2.value) || 'アイコン表示開始日はアイコン表示終了日より前または同じでなければなりません。'
       }
       return true
     }
