@@ -29,7 +29,8 @@ import json
 import shutil
 import requests
 # os.chdir(os.path.dirname(os.path.abspath(__file__)))
-os.chdir(os.path.dirname(sys.argv[0]))
+exec_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+os.chdir(exec_dir)
 
 # ログ設定
 logging.basicConfig(
@@ -306,7 +307,7 @@ def create_excel_file(filename):
     icon_sheet.column_dimensions['B'].width = 40 # アイコンパス
 
     # "images"フォルダを作成（実行ファイルと同じディレクトリ）
-    images_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
+    images_dir = os.path.join(exec_dir, 'images')
     if not os.path.exists(images_dir):
         os.makedirs(images_dir)
         logging.info(f'"images"フォルダを作成しました: {images_dir}')
@@ -558,7 +559,7 @@ def function2(save_path, song_urls, headless=False):
                 try:
                     # アイコン画像をダウンロード
                     icon_filename = f"{sanitize_filename(account_name)}.jpg" # アカウント名.jpg
-                    icon_path = os.path.join(images_dir, icon_filename)
+                    icon_path = os.path.join(exec_dir, 'images', icon_filename)
 
                     # 相対パスを設定（imagesフォルダ名とファイル名のみ）
                     relative_path = f"images/{icon_filename}"
