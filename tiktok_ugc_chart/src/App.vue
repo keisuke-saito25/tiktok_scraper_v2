@@ -59,6 +59,14 @@
               </v-col>
             </v-row>
 
+            <v-row v-if="currentFileName" class="my-4">
+              <v-col cols="12">
+                <span class="current-file-name">
+                  現在読み込んでいるファイル: {{ currentFileName }}
+                </span>
+              </v-col>
+            </v-row>
+
             <!-- グラフ表示 -->
             <v-row>
               <v-col cols="12">
@@ -183,8 +191,14 @@ const showError = (message: string) => {
   snackbar.value = true
 }
 
+// 現在読み込んでいるファイル名を保持
+const currentFileName = ref<string | null>(null)
+
 // ファイル読み込み処理
 const handleFile = (file: File) => {
+  // 現在のファイル名を設定
+  currentFileName.value = file.name
+
   const reader = new FileReader()
   reader.onload = (e) => {
     try {
