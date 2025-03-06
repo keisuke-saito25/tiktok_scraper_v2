@@ -60,12 +60,14 @@ const getInitialPosition = (uniqueId: string, index: number) => {
   const iconSize = 80 // アイコンの幅・高さ
   const padding = 10 // アイコン間のパディング
   const spacing = iconSize + padding // スペーシング
-  const iconsPerRow = 8 // 1行あたりのアイコン数
+  const iconsPerRow = 6 // 1行あたりのアイコン数
+  const containerWidth = chartContainer.value?.clientWidth || 800 // コンテナの幅を取得
 
-  // アイコンのグリッド位置を計算
+  // アイコンのグリッド位置を中央から開始して右方向に配置
+  const startX = containerWidth / 2
   const position = {
-    x: padding + (index % iconsPerRow) * spacing,
-    y: padding + Math.floor(index / iconsPerRow) * spacing
+    x: startX + (index % iconsPerRow) * spacing,
+    y: padding + Math.floor(index / iconsPerRow) * spacing + 20 // y座標を20ピクセル下げる
   }
 
   // 初期位置を保存
