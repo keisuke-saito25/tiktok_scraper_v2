@@ -171,12 +171,15 @@ const applyFilters = () => {
   }
 
   try {
+    const fromDate = new Date(filterFrom.value)
+    const toDate = new Date(filterTo.value)
+    
+    // toDateをその日の23:59:59に設定
+    toDate.setHours(23, 59, 59, 999)
+
     filteredSongInfoData.value = songInfoData.value.filter(item => {
       if (typeof item.日付 !== 'string') return false
       const itemDate = new Date(item.日付)
-      const fromDate = new Date(filterFrom.value)
-      const toDate = new Date(filterTo.value)
-
       return itemDate >= fromDate && itemDate <= toDate
     })
   } catch (error) {
