@@ -195,8 +195,7 @@ const loadImage = (src: string): Promise<void> => {
   })
 }
 
-// アイコンをCanvasに描画するヘルパー関数（クリッピングを追加）
-// UGCChart.vue 内の drawIcon 関数の修正版
+// アイコンをCanvasに描画するヘルパー関数
 const drawIcon = (ctx: CanvasRenderingContext2D, post: TikTokPost, x: number, y: number): Promise<void> => {
   return new Promise((resolve) => {
     const img = new Image()
