@@ -11,6 +11,8 @@
       :initialPosition="getInitialPosition(post.uniqueId, index)"
       :containerRef="chartContainer"
       :isOrangeBorder="post.isOrangeBorder"
+      :isShowFollowers="post.isShowFollowers"
+      :followers="post.フォロワー数"
       @update:position="handlePositionUpdate(post.uniqueId, $event)"
     />
   </div>
@@ -194,11 +196,11 @@ const loadImage = (src: string): Promise<void> => {
 }
 
 // アイコンをCanvasに描画するヘルパー関数（クリッピングを追加）
-const drawIcon = (ctx: CanvasRenderingContext2D, src: string, x: number, y: number, isOrangeBorder: boolean): Promise<void> => {
+const drawIcon = (ctx: CanvasRenderingContext2D, post: TikTokPost, x: number, y: number): Promise<void> => {
   return new Promise((resolve) => {
     const img = new Image()
     img.crossOrigin = 'anonymous' // 画像のCORS設定
-    img.src = src
+    img.src = post.アイコン
     img.onload = () => {
       // クリッピングパスの設定
       ctx.save() // 現在の描画状態を保存
@@ -213,22 +215,62 @@ const drawIcon = (ctx: CanvasRenderingContext2D, src: string, x: number, y: numb
 
       // 境界線の描画
       ctx.beginPath()
-      if (isOrangeBorder) {
+      if (post.isOrangeBorder) {
         ctx.strokeStyle = 'orange'
       } else {
-        ctx.strokeStyle = '#90ee90' // デフォルトの緑色枠
+        ctx.strokeStyle = '#49996c' // デフォルトの緑色枠
       }
       ctx.lineWidth = 4
       ctx.arc(x + 40, y + 40, 40, 0, 2 * Math.PI)
       ctx.stroke()
 
+      // フォロワー数バッジの描画
+      if (post.isShowFollowers) {
+        const followerText = formatFollowerCount(post.フォロワー数)
+        
+        // テキストの幅を測定
+        ctx.font = 'bold 12px Arial'
+        const textWidth = ctx.measureText(followerText).width
+        
+        // バッジの描画
+        const badgeWidth = textWidth + 16
+        const badgeHeight = 20
+        const badgeX = x + (80 - badgeWidth) / 2
+        const badgeY = y + 80 - 8
+        
+        // 背景
+        ctx.fillStyle = 'rgba(67, 97, 238, 0.9)'
+        ctx.beginPath()
+        ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 10)
+        ctx.fill()
+        
+        // 枠線
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+        ctx.lineWidth = 1
+        ctx.stroke()
+        
+        // テキスト
+        ctx.fillStyle = 'white'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(followerText, x + 40, badgeY + badgeHeight / 2)
+      }
+
       resolve()
     }
     img.onerror = (error) => {
-      console.error(`画像のロードに失敗しました: ${src}`, error)
+      console.error(`画像のロードに失敗しました: ${post.アイコン}`, error)
       resolve()
     }
   })
+}
+
+// フォロワー数を見やすくフォーマットする関数
+const formatFollowerCount = (count: number): string => {
+  if (count >= 10000) {
+    return `${(count / 10000).toFixed(1)}万`
+  }
+  return count.toLocaleString()
 }
 
 // エクスポート関数
@@ -278,7 +320,7 @@ const exportIconsAsImage = async () => {
     const position = iconPositions.value[post.uniqueId]
     if (!position) continue
 
-    await drawIcon(ctx, post.アイコン, position.x, position.y, post.isOrangeBorder)
+    await drawIcon(ctx, post, position.x, position.y)
   }
 
   // 画像としてダウンロード
@@ -332,7 +374,7 @@ const exportChartAndIconsAsImage = async () => {
     const position = iconPositions.value[post.uniqueId]
     if (!position) continue
 
-    await drawIcon(ctx, post.アイコン, position.x, position.y, post.isOrangeBorder)
+    await drawIcon(ctx, post, position.x, position.y)
   }
 
   // 画像としてダウンロード

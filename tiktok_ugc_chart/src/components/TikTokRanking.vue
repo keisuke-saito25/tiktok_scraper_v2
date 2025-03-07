@@ -94,7 +94,7 @@
           </div>
           
           <div class="ranking-footer">
-            <p>Generated on {{ new Date().toLocaleDateString() }}</p>
+            <!-- <p>Generated on {{ new Date().toLocaleDateString() }}</p> -->
           </div>
         </div>
       </v-col>

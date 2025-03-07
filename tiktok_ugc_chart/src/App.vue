@@ -84,6 +84,7 @@
               :accounts="uniqueAccounts"
               @toggle-visibility="toggleVisibility"
               @toggle-orange-border="toggleOrangeBorder"
+              @toggle-show-followers="toggleShowFollowers"
             />
           </v-window-item>
 
@@ -372,6 +373,17 @@ const handleExportIcons = () => {
 const handleExportChartAndIcons = () => {
   if (ugcChartRef.value) {
     ugcChartRef.value.exportChartAndIconsAsImage()
+  }
+}
+
+// フォロワー数表示の状態を切り替える
+const toggleShowFollowers = (account: TikTokPost, value: boolean | null) => {
+  const foundAccount = uniqueAccounts.value.find(a => a.uniqueId === account.uniqueId)
+  if (foundAccount && value !== null) {
+    // 状態が変わらない場合は更新しない（不要な再レンダリングを防止）
+    if (foundAccount.isShowFollowers === value) return;
+    
+    foundAccount.isShowFollowers = value
   }
 }
 </script>

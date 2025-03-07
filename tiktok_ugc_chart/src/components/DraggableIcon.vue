@@ -1,13 +1,17 @@
 <template>
-  <img
-    :src="src"
-    :alt="alt"
-    :class="['chart-icon', { 'orange-border': isOrangeBorder }]"
-    :style="{ top: position.y + 'px', left: position.x + 'px' }"
-    @mousedown="startDrag"
-    @touchstart="startDrag"
-    referrerpolicy="no-referrer"
-  />
+  <div class="icon-container" :style="{ top: position.y + 'px', left: position.x + 'px' }">
+    <img
+      :src="src"
+      :alt="alt"
+      :class="['chart-icon', { 'orange-border': isOrangeBorder }]"
+      @mousedown="startDrag"
+      @touchstart="startDrag"
+      referrerpolicy="no-referrer"
+    />
+    <div class="followers-badge" v-if="isShowFollowers">
+      {{ formatFollowerCount(followers) }}
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -19,7 +23,9 @@ const props = defineProps<{
   alt: string
   initialPosition?: { x: number, y: number }
   containerRef: HTMLElement | null
-  isOrangeBorder: boolean 
+  isOrangeBorder: boolean
+  isShowFollowers: boolean
+  followers: number
 }>()
 
 // Emits定義
@@ -127,25 +133,56 @@ onBeforeUnmount(() => {
   window.removeEventListener('touchend', endDrag)
   window.removeEventListener('touchcancel', endDrag)
 })
+
+// フォロワー数を見やすくフォーマットする関数
+const formatFollowerCount = (count: number): string => {
+  if (count >= 10000) {
+    return `${(count / 10000).toFixed(1)}万`
+  }
+  return count.toLocaleString()
+}
 </script>
 
 <style scoped>
-.chart-icon {
+.icon-container {
   position: absolute;
-  width: 80px; /* アイコンの幅 */
-  height: 80px; /* アイコンの高さ */
   z-index: 10; /* チャートより前面に表示 */
-  border-radius: 50%; /* 丸く表示 */
-  border: 2px solid #90ee90; /* デフォルトの白枠 */
   cursor: grab; /* ドラッグ可能カーソル */
   user-select: none; /* テキスト選択防止 */
+  width: 80px; /* コンテナの幅 */
+  height: auto; /* 高さは内容に合わせて自動調整 */
+}
+
+.chart-icon {
+  width: 80px; /* アイコンの幅 */
+  height: 80px; /* アイコンの高さ */
+  border-radius: 50%; /* 丸く表示 */
+  border: 2px solid #49996c; /* デフォルトの枠 */
+  cursor: inherit; /* 親要素からカーソルスタイルを継承 */
 }
 
 .chart-icon.orange-border {
   border-color: orange; /* オレンジの縁 */
 }
 
-.chart-icon:active {
+.icon-container:active {
   cursor: grabbing; /* ドラッグ中のカーソル */
+}
+
+.followers-badge {
+  background: rgba(67, 97, 238, 0.9);
+  color: white;
+  border-radius: 12px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: bold;
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.5);
 }
 </style>

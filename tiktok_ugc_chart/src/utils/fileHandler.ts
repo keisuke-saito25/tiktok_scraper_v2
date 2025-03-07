@@ -167,6 +167,7 @@ export const extractTikTokPostData = (
         uniqueId: generateUniqueId(),
         isVisible: false, // 初期状態は非表示
         isOrangeBorder: false,
+        isShowFollowers: true, 
       } as TikTokPost;
       
       posts.push(post);

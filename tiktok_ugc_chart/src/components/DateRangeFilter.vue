@@ -33,6 +33,8 @@
           outlined
           dense
           :rules="fromRules2"
+          :min="from"
+          :max="to"
           @update:model-value="updateFilters"
         ></v-text-field>
       </v-col>
@@ -90,19 +92,32 @@
   
   // From2のバリデーションルール（非必須）
   const fromRules2 = [
-    (value: string) => {
-      if (value && !isValidDate(value)) {
-        return '有効な日付を入力してください。'
-      }
-      return true
-    },
-    () => {
-      if (from2.value) {
-        return new Date(from2.value) <= new Date(to2.value) || 'アイコン表示開始日はアイコン表示終了日より前または同じでなければなりません。'
-      }
-      return true
+  (value: string) => {
+    if (value && !isValidDate(value)) {
+      return '有効な日付を入力してください。'
     }
-  ]
+    return true
+  },
+  () => {
+    if (from2.value) {
+      return new Date(from2.value) <= new Date(to2.value) || 'アイコン表示開始日はアイコン表示終了日より前または同じでなければなりません。'
+    }
+    return true
+  },
+  // アイコン表示開始日はチャート表示期間内である必要がある
+  () => {
+    if (from2.value && from.value && to.value) {
+      const from2Date = new Date(from2.value)
+      const fromDate = new Date(from.value)
+      const toDate = new Date(to.value)
+      
+      if (from2Date < fromDate || from2Date > toDate) {
+        return `アイコン表示開始日はチャート表示期間内（${from.value} 〜 ${to.value}）である必要があります。`
+      }
+    }
+    return true
+  }
+]
   
   // フィルタの有効性を検証
   const isFilterValid = computed(() => {
@@ -140,4 +155,12 @@
   watch(() => props.initialFrom2, (newValue) => {
     if (newValue) from2.value = newValue
   }, { immediate: true })
+
+  watch([() => from.value, () => to.value], () => {
+  // チャート表示期間が変更されたら、アイコン表示開始日をクリア
+  from2.value = ''
+  
+  // フィルター更新を通知
+  updateFilters()
+})
   </script>
