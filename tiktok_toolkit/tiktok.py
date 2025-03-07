@@ -29,8 +29,18 @@ import json
 import shutil
 import requests
 # os.chdir(os.path.dirname(os.path.abspath(__file__)))
-exec_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+def get_executable_dir():
+    if getattr(sys, 'frozen', False):
+        # PyInstallerでコンパイルされた実行ファイルの場合
+        return os.path.dirname(sys.executable)
+    else:
+        # 通常のPythonスクリプトの場合
+        return os.path.dirname(os.path.abspath(__file__))
+
+exec_dir = get_executable_dir()
 os.chdir(exec_dir)
+
+images_dir = os.path.join(exec_dir, 'images')
 
 # ログ設定
 logging.basicConfig(
