@@ -25,7 +25,7 @@ import type { ChartData, ChartOptions } from 'chart.js'
 import DraggableIcon from './DraggableIcon.vue'
 import type { SongInfo } from '@/types/SongInfo'
 import type { TikTokPost } from '@/types/TikTokPost'
-import { formatDateToYYYYMMDDWithSlash } from '@/utils/dateUtils'
+import { formatDateToMMDDWithSlash, formatDateToYYYYMMDDWithSlash } from '@/utils/dateUtils'
 
 // Chart.jsのコンポーネント登録
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend)
@@ -92,7 +92,7 @@ const formatData = (data: SongInfo[]) => {
         console.warn(`データの項目 ${index + 1} に無効な日付形式があります:`, item.日付)
         return '無効な日付'
       }
-      return formatDateToYYYYMMDDWithSlash(item.日付)
+      return formatDateToMMDDWithSlash(item.日付)
     }
     return item.日付.toString()
   })
