@@ -220,7 +220,7 @@ const drawIcon = (ctx: CanvasRenderingContext2D, post: TikTokPost, x: number, y:
       } else {
         ctx.strokeStyle = '#49996c' // デフォルトの緑色枠
       }
-      ctx.lineWidth = 4
+      ctx.lineWidth = 3
       ctx.arc(x + 40, y + 40, 40, 0, 2 * Math.PI)
       ctx.stroke()
 

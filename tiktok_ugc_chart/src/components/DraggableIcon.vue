@@ -157,7 +157,7 @@ const formatFollowerCount = (count: number): string => {
   width: 80px; /* アイコンの幅 */
   height: 80px; /* アイコンの高さ */
   border-radius: 50%; /* 丸く表示 */
-  border: 2px solid #49996c; /* デフォルトの枠 */
+  border: 3px solid #49996c; /* デフォルトの枠 */
   cursor: inherit; /* 親要素からカーソルスタイルを継承 */
 }
 
