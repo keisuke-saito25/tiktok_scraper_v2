@@ -29,8 +29,18 @@ import json
 import shutil
 import requests
 # os.chdir(os.path.dirname(os.path.abspath(__file__)))
-exec_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+def get_executable_dir():
+    if getattr(sys, 'frozen', False):
+        # PyInstallerでコンパイルされた実行ファイルの場合
+        return os.path.dirname(sys.executable)
+    else:
+        # 通常のPythonスクリプトの場合
+        return os.path.dirname(os.path.abspath(__file__))
+
+exec_dir = get_executable_dir()
 os.chdir(exec_dir)
+
+images_dir = os.path.join(exec_dir, 'images')
 
 # ログ設定
 logging.basicConfig(
@@ -211,13 +221,12 @@ def function1(save_path, max_items, song_urls, headless=False):
         if not driver:
             logging.error('WebDriverの初期化に失敗しました。')
             break
-    
+
         try:
             sanitized_name = sanitize_filename(song_name)
             excel_filename = os.path.join(save_path, f'{sanitized_name}.xlsx')
 
-            # "images"フォルダを作成（実行ファイルと同じディレクトリ）
-            images_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
+            # グローバルの images_dir を使用
             if not os.path.exists(images_dir):
                 os.makedirs(images_dir)
                 logging.info(f'"images"フォルダを作成しました: {images_dir}')
@@ -236,8 +245,6 @@ def function1(save_path, max_items, song_urls, headless=False):
                     icon_sheet.append(['アカウント名', 'アイコンパス'])
                     icon_sheet.column_dimensions['A'].width = 25  # アカウント名
                     icon_sheet.column_dimensions['B'].width = 40  # アイコンパス
-            
-            workbook = load_workbook(excel_filename) if os.path.exists(excel_filename) else create_excel_file(excel_filename)
 
             # 楽曲情報シートの更新
             update_music_info_sheet(driver, workbook, song_name, song_url, excel_filename)
@@ -278,12 +285,11 @@ def function1(save_path, max_items, song_urls, headless=False):
                     logging.error(f'ファイルの保存中にエラーが発生しました: {e}')
                     messagebox.showerror('エラー', f'ファイルの保存中にエラーが発生しました: {e}')
                     break
-        
+
         finally:
             # driverを終了させる
             driver.quit()
 
-    driver.quit()
     logging.info('#機能1 処理実行停止')
 
 def create_excel_file(filename):
@@ -486,27 +492,26 @@ def function2(save_path, song_urls, headless=False):
 
     operations_count = 0
 
-    # アイコンフォルダを確認し、なければ作成
-    images_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
+    # グローバルの images_dir を使用
     if not os.path.exists(images_dir):
         os.makedirs(images_dir)
         logging.info(f'"images"フォルダを作成しました: {images_dir}')
-    
+
     for song_name, _ in song_urls:
         if stop_flag.is_set():
             logging.info('#機能2 処理が停止されました')
             break
-        
+
         sanitized_name = sanitize_filename(song_name)
         excel_filename = os.path.join(save_path, f'{sanitized_name}.xlsx')
 
         if not os.path.exists(excel_filename):
             logging.error(f'ファイルが存在しません: {excel_filename}')
             continue
-        
+
         workbook = load_workbook(excel_filename)
         today_str = datetime.today().strftime('%Y%m%d')
-        
+
         # ユーザーアイコンシートの確認と作成
         if 'ユーザーアイコン' not in workbook.sheetnames:
             icon_sheet = workbook.create_sheet(title='ユーザーアイコン')
@@ -521,7 +526,7 @@ def function2(save_path, song_urls, headless=False):
             continue
 
         sheet = workbook[today_str]
-        
+
         # 総URL件数をカウント
         total_urls_count = sum(1 for row in sheet.iter_rows(min_row=2, min_col=11, max_col=11) if row[0].value)
 
@@ -551,19 +556,19 @@ def function2(save_path, song_urls, headless=False):
             data = extract_video_data(driver, original_window, follower_window_handle)
             write_video_data_to_row(sheet, row, data)
 
-             # アイコン処理
+            # アイコン処理
             account_name = data.get('アカウント名')
             avatar_url = data.get('アバターURL')
-            
+
             if account_name and avatar_url and account_name not in account_icons:
                 try:
                     # アイコン画像をダウンロード
-                    icon_filename = f"{sanitize_filename(account_name)}.jpg" # アカウント名.jpg
-                    icon_path = os.path.join(exec_dir, 'images', icon_filename)
+                    icon_filename = f"{sanitize_filename(account_name)}.jpg"  # アカウント名.jpg
+                    icon_path = os.path.join(images_dir, icon_filename)
 
                     # 相対パスを設定（imagesフォルダ名とファイル名のみ）
                     relative_path = f"images/{icon_filename}"
-                    
+
                     # requestsを使ってダウンロード
                     response = requests.get(avatar_url, stream=True)
                     if response.status_code == 200:
@@ -610,37 +615,12 @@ def function2(save_path, song_urls, headless=False):
                         logging.error(f'ファイルの保存中にエラーが発生しました: {e}')
                         messagebox.showerror('エラー', f'ファイルの保存中にエラーが発生しました: {e}')
                         break
-        
-        # # 未完了データの再処理
-        # incomplete_rows = [
-        #     row for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, max_col=12)
-        #     if (not all(cell.value for index, cell in enumerate(row[:10]) if index != 8))
-        # ]
-        # logging.info(f'{song_name} 再処理対象: {len(incomplete_rows)} 件')
 
-        # for row in incomplete_rows:
-        #     if stop_flag.is_set():
-        #         break
-
-        #     link = row[10].value  
-        #     if not link:
-        #         continue
-
-        #     # URL再処理
-        #     driver.switch_to.window(original_window)
-        #     driver.get(link)
-        #     time.sleep(random.uniform(1, 2))
-
-        #     data = extract_video_data(driver, original_window, follower_window_handle)
-        #     write_video_data_to_row(sheet, row, data)
-
-        #     operations_count += 1
-        
         # アカウントアイコン情報の更新
         # 現在のシートをクリア（ヘッダー行は残す）
         if icon_sheet.max_row > 1:
             icon_sheet.delete_rows(2, icon_sheet.max_row - 1)
-        
+
         # 新しいデータを書き込み
         for account_name, icon_path in account_icons.items():
             icon_sheet.append([account_name, icon_path])
@@ -659,9 +639,9 @@ def function2(save_path, song_urls, headless=False):
                 logging.error(f'ファイルの保存中にエラーが発生しました: {e}')
                 messagebox.showerror('エラー', f'ファイルの保存中にエラーが発生しました: {e}')
                 break
+
     driver.quit()
     logging.info('#機能2 処理実行停止')
-
 def parse_date_posted(date_posted_str, update_datetime):
     date_posted_str = date_posted_str.strip()
 
