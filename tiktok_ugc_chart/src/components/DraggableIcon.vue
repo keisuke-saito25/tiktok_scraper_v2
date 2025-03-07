@@ -1,13 +1,19 @@
 <template>
   <div class="icon-container" :style="{ top: position.y + 'px', left: position.x + 'px' }">
-    <img
-      :src="src"
-      :alt="alt"
-      :class="['chart-icon', { 'orange-border': isOrangeBorder }]"
-      @mousedown="startDrag"
-      @touchstart="startDrag"
-      referrerpolicy="no-referrer"
-    />
+    <div :class="['icon-wrapper', { 'orange-border': isOrangeBorder }]">
+      <img
+        v-if="isImageLoaded"
+        :src="src"
+        :alt="alt"
+        class="chart-icon"
+        @mousedown="startDrag"
+        @touchstart="startDrag"
+        referrerpolicy="no-referrer"
+      />
+      <div v-else class="fallback-icon" @mousedown="startDrag" @touchstart="startDrag">
+        {{ getInitials(alt) }}
+      </div>
+    </div>
     <div class="followers-badge" v-if="isShowFollowers">
       {{ formatFollowerCount(followers) }}
     </div>
@@ -15,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeUnmount, defineProps, defineEmits } from 'vue'
+import { ref, onBeforeUnmount, defineProps, defineEmits, onMounted } from 'vue'
 
 // Props定義
 const props = defineProps<{
@@ -33,6 +39,34 @@ const emit = defineEmits(['update:position'])
 
 // アイコンの現在位置
 const position = ref<{ x: number, y: number }>(props.initialPosition || { x: 10, y: 10 })
+
+// 画像ロード状態
+const isImageLoaded = ref(false)
+
+// 画像の読み込み確認
+onMounted(() => {
+  const img = new Image()
+  img.onload = () => {
+    isImageLoaded.value = true
+  }
+  img.onerror = () => {
+    isImageLoaded.value = false
+  }
+  img.src = props.src
+})
+
+// ユーザー名のイニシャルを取得（最大2文字）
+const getInitials = (name: string): string => {
+  if (!name) return '?'
+  
+  // 英数字の場合
+  if (/^[a-zA-Z0-9]/.test(name)) {
+    return name.substring(0, 2).toUpperCase()
+  }
+  
+  // 日本語などの場合
+  return name.substring(0, 1)
+}
 
 // ドラッグ状態管理
 const isDragging = ref(false)
@@ -146,27 +180,50 @@ const formatFollowerCount = (count: number): string => {
 <style scoped>
 .icon-container {
   position: absolute;
-  z-index: 10; /* チャートより前面に表示 */
-  cursor: grab; /* ドラッグ可能カーソル */
-  user-select: none; /* テキスト選択防止 */
-  width: 80px; /* コンテナの幅 */
-  height: auto; /* 高さは内容に合わせて自動調整 */
+  z-index: 10;
+  cursor: grab;
+  user-select: none;
+  width: 80px;
+  height: 80px;
+}
+
+.icon-wrapper {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 3px solid #49996c;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-wrapper.orange-border {
+  border-color: orange;
 }
 
 .chart-icon {
-  width: 80px; /* アイコンの幅 */
-  height: 80px; /* アイコンの高さ */
-  border-radius: 50%; /* 丸く表示 */
-  border: 3px solid #49996c; /* デフォルトの枠 */
-  cursor: inherit; /* 親要素からカーソルスタイルを継承 */
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.chart-icon.orange-border {
-  border-color: orange; /* オレンジの縁 */
+.fallback-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #49996c;
+  color: white;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: grab;
 }
 
-.icon-container:active {
-  cursor: grabbing; /* ドラッグ中のカーソル */
+.icon-container:active,
+.fallback-icon:active {
+  cursor: grabbing;
 }
 
 .followers-badge {

@@ -196,11 +196,14 @@ const loadImage = (src: string): Promise<void> => {
 }
 
 // アイコンをCanvasに描画するヘルパー関数（クリッピングを追加）
+// UGCChart.vue 内の drawIcon 関数の修正版
 const drawIcon = (ctx: CanvasRenderingContext2D, post: TikTokPost, x: number, y: number): Promise<void> => {
   return new Promise((resolve) => {
     const img = new Image()
     img.crossOrigin = 'anonymous' // 画像のCORS設定
     img.src = post.アイコン
+    
+    // 画像ロード成功のハンドラー
     img.onload = () => {
       // クリッピングパスの設定
       ctx.save() // 現在の描画状態を保存
@@ -212,57 +215,99 @@ const drawIcon = (ctx: CanvasRenderingContext2D, post: TikTokPost, x: number, y:
       ctx.drawImage(img, x, y, 80, 80) // アイコンサイズに合わせて調整
 
       ctx.restore() // 描画状態を復元
-
-      // 境界線の描画
-      ctx.beginPath()
-      if (post.isOrangeBorder) {
-        ctx.strokeStyle = 'orange'
-      } else {
-        ctx.strokeStyle = '#49996c' // デフォルトの緑色枠
-      }
-      ctx.lineWidth = 3
-      ctx.arc(x + 40, y + 40, 40, 0, 2 * Math.PI)
-      ctx.stroke()
-
-      // フォロワー数バッジの描画
-      if (post.isShowFollowers) {
-        const followerText = formatFollowerCount(post.フォロワー数)
-        
-        // テキストの幅を測定
-        ctx.font = 'bold 12px Arial'
-        const textWidth = ctx.measureText(followerText).width
-        
-        // バッジの描画
-        const badgeWidth = textWidth + 16
-        const badgeHeight = 20
-        const badgeX = x + (80 - badgeWidth) / 2
-        const badgeY = y + 80 - 8
-        
-        // 背景
-        ctx.fillStyle = 'rgba(67, 97, 238, 0.9)'
-        ctx.beginPath()
-        ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 10)
-        ctx.fill()
-        
-        // 枠線
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
-        ctx.lineWidth = 1
-        ctx.stroke()
-        
-        // テキスト
-        ctx.fillStyle = 'white'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(followerText, x + 40, badgeY + badgeHeight / 2)
-      }
-
+      
+      // 以下は共通処理なので、追加の関数に切り出し
+      drawBorderAndBadge(ctx, post, x, y)
+      
       resolve()
     }
-    img.onerror = (error) => {
-      console.error(`画像のロードに失敗しました: ${post.アイコン}`, error)
+    
+    // 画像ロード失敗時のハンドラー
+    img.onerror = () => {
+      // アカウント名のイニシャルを取得
+      const initials = getInitials(post.アカウント名 || '?')
+      
+      // 背景を描画
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(x + 40, y + 40, 40, 0, 2 * Math.PI)
+      ctx.fillStyle = '#49996c'
+      ctx.fill()
+      
+      // イニシャルのテキストを描画
+      ctx.fillStyle = 'white'
+      ctx.font = 'bold 20px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(initials, x + 40, y + 40)
+      
+      ctx.restore()
+      
+      // 共通処理を呼び出し
+      drawBorderAndBadge(ctx, post, x, y)
+      
       resolve()
     }
   })
+}
+
+// イニシャルを取得する関数
+const getInitials = (name: string): string => {
+  if (!name) return '?'
+  
+  // 英数字の場合
+  if (/^[a-zA-Z0-9]/.test(name)) {
+    return name.substring(0, 2).toUpperCase()
+  }
+  
+  // 日本語などの場合
+  return name.substring(0, 1)
+}
+
+// 境界線とフォロワーバッジを描画する共通関数
+const drawBorderAndBadge = (ctx: CanvasRenderingContext2D, post: TikTokPost, x: number, y: number) => {
+  // 境界線の描画
+  ctx.beginPath()
+  if (post.isOrangeBorder) {
+    ctx.strokeStyle = 'orange'
+  } else {
+    ctx.strokeStyle = '#49996c' // デフォルトの緑色枠
+  }
+  ctx.lineWidth = 3
+  ctx.arc(x + 40, y + 40, 40, 0, 2 * Math.PI)
+  ctx.stroke()
+
+  // フォロワー数バッジの描画
+  if (post.isShowFollowers) {
+    const followerText = formatFollowerCount(post.フォロワー数)
+    
+    // テキストの幅を測定
+    ctx.font = 'bold 12px Arial'
+    const textWidth = ctx.measureText(followerText).width
+    
+    // バッジの描画
+    const badgeWidth = textWidth + 16
+    const badgeHeight = 20
+    const badgeX = x + (80 - badgeWidth) / 2
+    const badgeY = y + 80 - 8
+    
+    // 背景
+    ctx.fillStyle = 'rgba(67, 97, 238, 0.9)'
+    ctx.beginPath()
+    ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 10)
+    ctx.fill()
+    
+    // 枠線
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    
+    // テキスト
+    ctx.fillStyle = 'white'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(followerText, x + 40, badgeY + badgeHeight / 2)
+  }
 }
 
 // フォロワー数を見やすくフォーマットする関数
