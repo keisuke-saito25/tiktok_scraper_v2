@@ -14,10 +14,14 @@ def parse_number(text):
     if not match:
         logging.warning("数値として解析できませんでした: '%s'", text)
         return 0
-    number, suffix = match.groups()
-    number = number.replace(',', '').replace('.', '')
+        
+    number_str, suffix = match.groups()
+    
+    # カンマを除去して小数点を処理
+    number_str = number_str.replace(',', '')
+    
     try:
-        value = float(number)
+        value = float(number_str)
         if suffix.upper() in MULTIPLIERS:
             value *= MULTIPLIERS[suffix.upper()]
         return int(value)

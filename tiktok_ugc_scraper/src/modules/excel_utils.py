@@ -65,7 +65,9 @@ def read_alert_value(workbook):
 
         try:
             alert_value = float(b1_value)
-            logging.info("アラート基準値を %0.2f%% として読み込みました。", alert_value)
+            # 整数に変換
+            alert_value = int(alert_value)
+            logging.info("アラート基準値を %d として読み込みました。", alert_value)
             return alert_value
         except ValueError:
             logging.error("B1セルの値が数値ではありません: %s", b1_value)
@@ -166,17 +168,18 @@ def apply_style(cell, fill, font):
     cell.fill = fill
     cell.font = font
 
-def check_and_apply_alert(cell_delta, cell_ratio, ratio, alert_value, styles, row):
+def check_and_apply_alert(cell_delta, cell_ratio, delta, ratio, alert_value, styles, row):
     """
     アラート条件をチェックし、セルにスタイルを適用またはリセットする関数
+    増減数(delta)を基準にアラートを表示
     """
     alert_fill, alert_font, default_fill, default_font = styles
-    if alert_value is not None and ratio >= alert_value:
-        logging.debug("アラート条件を満たしました。行: %d, ratio: %.2f%% >= %.2f%%", row, ratio, alert_value)
+    if alert_value is not None and delta >= alert_value:
+        logging.debug("アラート条件を満たしました。行: %d, delta: %d >= %d", row, delta, alert_value)
         apply_style(cell_delta, alert_fill, alert_font)
         apply_style(cell_ratio, alert_fill, alert_font)
     else:
-        logging.debug("アラート条件を満たしていません。行: %d, ratio: %.2f%% < %.2f%%", row, ratio, alert_value)
+        logging.debug("アラート条件を満たしていません。行: %d, delta: %d < %d", row, delta, alert_value)
         apply_style(cell_delta, default_fill, default_font)
         apply_style(cell_ratio, default_fill, default_font)
 
@@ -250,7 +253,7 @@ def update_ugc_entry(workbook, ugc, row):
                 delta = ugc - prev_ugc
                 ratio = (delta / prev_ugc) * 100 if prev_ugc != 0 else 0
 
-        logging.debug("行 %d: delta=%s, ratio=%s%%, alert_value=%s%%", row, delta, ratio, alert_value)
+        logging.debug("行 %d: delta=%s, ratio=%s%%, alert_value=%s", row, delta, ratio, alert_value)
 
         # 増減数 (B列) と増減率 (C列) を更新
         cell_delta = ugc_sheet.cell(row=row, column=DELTA_COLUMN)
@@ -274,8 +277,8 @@ def update_ugc_entry(workbook, ugc, row):
             default_font = Font(bold=False, color=DEFAULT_FONT_COLOR)
             styles = (alert_fill, alert_font, default_fill, default_font)
 
-            # アラートチェック
-            check_and_apply_alert(cell_delta, cell_ratio, ratio, alert_value, styles, row)
+            # アラートチェック（増減数ベース）
+            check_and_apply_alert(cell_delta, cell_ratio, delta, ratio, alert_value, styles, row)
         else:
             # スタイルをデフォルトにリセット
             default_fill = PatternFill(fill_type=DEFAULT_FILL_TYPE)
@@ -302,7 +305,7 @@ def update_ugc_entry(workbook, ugc, row):
         apply_style(cell_ratio, default_fill, default_font)
         
         return None  # delta_count は None
-
+    
 def update_difference_entry(workbook, delta, row):
     """
     増減シートに増減数を書き込む関数
