@@ -450,8 +450,8 @@ const exportRanking = async () => {
   background-color: #f5f7fc;
   color: #111;
   border-radius: 32px;
-  padding: 50px;
-  max-width: 1200px;
+  padding: 40px; 
+  max-width: 600px;
   margin: 0 auto;
   box-shadow: 
     0 30px 60px rgba(0, 0, 0, 0.03),
@@ -508,9 +508,8 @@ const exportRanking = async () => {
 
 .ranking-list {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr; /* 2カラムから1カラムに変更 */
   gap: 24px;
-  /* 要素間の距離を広げる */
   margin-bottom: 24px;
 }
 
@@ -529,6 +528,9 @@ const exportRanking = async () => {
     0 10px 25px rgba(0, 0, 0, 0.03),
     0 6px 12px rgba(0, 0, 0, 0.05),
     inset 0 -1px 1px rgba(255, 255, 255, 0.4);
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
 }
 
 .ranking-position {
