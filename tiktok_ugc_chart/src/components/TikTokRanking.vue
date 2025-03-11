@@ -95,8 +95,12 @@
                 </div>
                 
                 <div class="ranking-details">
-                  <div class="account-name">{{ item.ニックネーム || item.アカウント名 }}</div>
-                  <div class="account-id">@{{ item.アカウント名 }}</div>
+                  <div class="account-name" :title="item.ニックネーム || item.アカウント名">
+                    {{ truncateNickname(item.ニックネーム || item.アカウント名) }}
+                  </div>
+                  <div class="account-id" :title="'@' + item.アカウント名">
+                    @{{ truncateAccountName(item.アカウント名) }}
+                  </div>
 
                   <div class="ranking-stats">
                     <div class="ranking-value">
@@ -475,6 +479,9 @@ const exportAllRankings = async () => {
 
 // ランキング画像のエクスポート処理（共通関数）
 const exportRankingImage = async (containerElement: HTMLElement, rankingType: string) => {
+  // 既存のスタイルをキャプチャ
+  const originalStyles = window.getComputedStyle(containerElement);
+  
   // html2canvasのオプションを詳細に設定
   const canvas = await html2canvas(containerElement, {
     useCORS: true,
@@ -483,31 +490,7 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
     scale: 2, // 高解像度化
     logging: false,
     removeContainer: false,
-    foreignObjectRendering: false,
-    onclone: (clonedDoc) => {
-      // クローンされたDOMでスタイルを上書き - より確実にレンダリングするため
-      const clonedContainer = clonedDoc.querySelector('.ranking-container')
-      if (clonedContainer && clonedContainer instanceof HTMLElement) {
-        clonedContainer.style.boxShadow = 'none' // 影を削除
-      }
-      
-      // グラデーションなどの問題のある要素を修正
-      const valueNumbers = clonedDoc.querySelectorAll('.value-number')
-      valueNumbers.forEach(el => {
-        if (el instanceof HTMLElement) {
-          el.style.color = '#4361EE'
-          el.style.background = 'none'
-        }
-      })
-      
-      const titleSpans = clonedDoc.querySelectorAll('.ranking-title h1 span')
-      titleSpans.forEach(el => {
-        if (el instanceof HTMLElement) {
-          el.style.color = '#4361EE'
-          el.style.background = 'none'
-        }
-      })
-    }
+    foreignObjectRendering: false
   })
   
   // 画像としてダウンロード
@@ -515,6 +498,43 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
   link.download = `ranking_${rankingType}_${formatDateToYYYYMMDD(selectedDate.value)}.png`
   link.href = canvas.toDataURL('image/png')
   link.click()
+}
+
+// ニックネームを適切な長さに省略する関数（日本語と英数字の幅の違いを考慮）
+const truncateNickname = (text: string, maxLength = 20): string => {
+  if (!text) return '';
+  
+  // 文字列の表示幅を概算する (日本語は2、英数字は1と仮定)
+  let displayWidth = 0;
+  let truncatedText = '';
+  
+  for (let i = 0; i < text.length; i++) {
+    // 日本語やその他の全角文字は幅が広い
+    const charCode = text.charCodeAt(i);
+    const charWidth = (charCode >= 0x3000 && charCode <= 0x9FFF) ||
+                     (charCode >= 0xFF00 && charCode <= 0xFFEF) ? 2 : 1;
+                     
+    displayWidth += charWidth;
+    
+    if (displayWidth > maxLength) {
+      truncatedText += '…';
+      break;
+    }
+    
+    truncatedText += text.charAt(i);
+  }
+  
+  return truncatedText;
+}
+
+// アカウント名も同様に省略する関数
+const truncateAccountName = (text: string, maxLength = 16): string => {
+  if (!text) return '';
+  // 省略
+  if (text.length > maxLength) {
+    return text.substring(0, maxLength - 1) + '…';
+  }
+  return text;
 }
 </script>
 
@@ -570,7 +590,7 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
 }
 
 .title-badge {
-  background: linear-gradient(90deg, #00C2FF, #6A5AFF);
+  background: #4361EE;
   color: white;
   font-size: 14px;
   font-weight: 800;
@@ -580,10 +600,7 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
   text-transform: uppercase;
   letter-spacing: 0.07em;
   margin-bottom: 14px;
-  box-shadow: 
-    0 10px 25px rgba(106, 90, 255, 0.25),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.1),
-    inset 0 2px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 10px 25px rgba(106, 90, 255, 0.25);
 }
 
 .ranking-title h1 {
@@ -624,12 +641,10 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
   position: relative;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.7);
   box-shadow: 
     0 10px 25px rgba(0, 0, 0, 0.03),
-    0 6px 12px rgba(0, 0, 0, 0.05),
-    inset 0 -1px 1px rgba(255, 255, 255, 0.4);
+    0 6px 12px rgba(0, 0, 0, 0.05);
   width: 100%;
   max-width: 500px;
   margin: 0 auto;
@@ -639,84 +654,56 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 56px;
+  min-width: 56px;
   height: 56px;
-  background: linear-gradient(135deg, #6A5AFF, #00C2FF);
+  background: #4361EE;
   color: white;
   border-radius: 18px;
   font-weight: 800;
   font-size: 24px;
   margin-right: 24px;
-  box-shadow: 
-    0 8px 16px rgba(106, 90, 255, 0.2),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.1),
-    inset 0 2px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 16px rgba(106, 90, 255, 0.2);
   position: relative;
   overflow: hidden;
 }
 
-.ranking-position::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 50%;
-  background: rgba(255, 255, 255, 0.15);
-  border-bottom-right-radius: 50%;
-  border-bottom-left-radius: 50%;
-}
-
 /* 上位3位のカスタムスタイル */
 .ranking-item:nth-child(1) .ranking-position {
-  background: linear-gradient(135deg, #FF9500, #FF2D55);
+  background: #FF2D55;
   box-shadow: 0 8px 16px rgba(255, 45, 85, 0.2);
 }
 
 .ranking-item:nth-child(2) .ranking-position {
-  background: linear-gradient(135deg, #747EF2, #5E5CE6);
+  background: #5E5CE6;
   box-shadow: 0 8px 16px rgba(94, 92, 230, 0.2);
 }
 
 .ranking-item:nth-child(3) .ranking-position {
-  background: linear-gradient(135deg, #FF9500, #FF6C00);
+  background: #FF9500;
   box-shadow: 0 8px 16px rgba(255, 108, 0, 0.2);
 }
 
 .ranking-icon {
   width: 72px;
   height: 72px;
+  min-width: 72px; /* 固定サイズを確保 */
   margin-right: 24px;
   overflow: hidden;
   border-radius: 22px;
   position: relative;
-  box-shadow: 
-    0 8px 20px rgba(0, 0, 0, 0.1),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.2);
-}
-
-.ranking-icon::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    45deg,
-    rgba(106, 90, 255, 0.2),
-    rgba(0, 194, 255, 0.1)
-  );
-  z-index: 1;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  background-color: #e0e0e0; /* プレースホルダー背景色 */
 }
 
 .ranking-icon img {
-  width: 100%;
-  height: 100%;
+  width: 72px;
+  height: 72px;
   object-fit: cover;
-  position: relative;
-  z-index: 0;
 }
 
 .ranking-details {
   flex: 1;
+  min-width: 0; /* flexアイテム内での省略を有効にする */
 }
 
 .account-name {
@@ -727,6 +714,7 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
   letter-spacing: -0.01em;
 }
 
@@ -737,6 +725,9 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
   font-weight: 500;
   letter-spacing: 0.02em;
   opacity: 0.8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .song-title-container {
@@ -749,17 +740,14 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
 }
 
 .song-title-badge {
-  background: linear-gradient(90deg, #FF9500, #FF2D55);
+  background: #FF2D55;
   color: white;
   font-size: 13px;
   font-weight: 700;
   padding: 5px 12px;
   border-radius: 100px;
   display: inline-block;
-  box-shadow: 
-    0 6px 15px rgba(255, 45, 85, 0.2),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 6px 15px rgba(255, 45, 85, 0.2);
 }
 
 .song-title-text {
@@ -767,6 +755,10 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
   color: #333;
   font-weight: 700;
   letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
 }
 
 .ranking-stats {
@@ -781,7 +773,6 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
   display: inline-flex;
   align-items: center;
   position: relative;
-  backdrop-filter: blur(10px);
   border: 1px solid rgba(106, 90, 255, 0.15);
   box-shadow: 0 4px 8px rgba(106, 90, 255, 0.05);
 }
@@ -814,19 +805,6 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
 .ranking-item:nth-child(3) {
   background: rgba(255, 247, 232, 0.85);
   border-left: 3px solid #FF9500;
-}
-
-/* 上位3位のアイコン装飾 */
-.ranking-item:nth-child(1) .ranking-icon::before {
-  background: linear-gradient(45deg, rgba(255, 45, 85, 0.15), rgba(255, 149, 0, 0.1));
-}
-
-.ranking-item:nth-child(2) .ranking-icon::before {
-  background: linear-gradient(45deg, rgba(94, 92, 230, 0.15), rgba(0, 194, 255, 0.1));
-}
-
-.ranking-item:nth-child(3) .ranking-icon::before {
-  background: linear-gradient(45deg, rgba(255, 149, 0, 0.15), rgba(255, 204, 0, 0.1));
 }
 
 /* フッター部分 */
