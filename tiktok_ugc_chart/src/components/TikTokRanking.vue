@@ -18,32 +18,41 @@
         ></v-text-field>
       </v-col>
       
-      <v-col cols="12" sm="6" md="3">
-        <v-select
-          v-model="selectedRankingType"
-          :items="rankingTypes"
-          label="ランキング種類"
-          outlined
-          dense
-        ></v-select>
+      <v-col cols="12" sm="6" md="6">
+        <!-- 複数選択に変更 -->
+        <div class="ranking-type-checkboxes">
+          <h3 class="subtitle-1 mb-2">ランキング種類（複数選択可）</h3>
+          <v-checkbox
+            v-for="type in rankingTypes"
+            :key="type"
+            v-model="selectedRankingTypes"
+            :label="type"
+            :value="type"
+            dense
+            hide-details
+            class="ranking-checkbox"
+          ></v-checkbox>
+        </div>
       </v-col>
-      
-      <v-col cols="12" sm="6" md="3" class="d-flex align-center">
+    </v-row>
+    
+    <v-row class="mt-4">
+      <v-col cols="12" class="d-flex justify-center">
         <v-btn
           color="primary"
-          :disabled="!selectedDate || !selectedRankingType || !excelLoaded"
-          @click="generateRanking"
+          :disabled="!selectedDate || selectedRankingTypes.length === 0 || !excelLoaded"
+          @click="generateRankings"
+          class="mr-2"
         >
-          ランキングを生成
+          選択したランキングを生成
         </v-btn>
         
         <v-btn
-          class="ml-2"
           color="success"
           :disabled="!rankingGenerated"
-          @click="exportRanking"
+          @click="exportAllRankings"
         >
-          画像保存
+          選択した画像を保存
         </v-btn>
       </v-col>
     </v-row>
@@ -56,62 +65,83 @@
       </v-col>
     </v-row>
     
-    <v-row v-if="rankingGenerated" class="mt-6">
-      <v-col cols="12">
-        <div ref="rankingContainer" class="ranking-container">
-          <div class="ranking-title">
-            <div class="title-badge">TikTok Ranking</div>
-            <h1>{{ getRankingType() }} <span>TOP 10</span></h1>
-            <div class="song-title-container" v-if="currentSongTitle">
-              <div class="song-title-badge">曲名</div>
-              <div class="song-title-text">{{ currentSongTitle }}</div>
+    <!-- ランキング表示エリア（横スクロール可能な横並び） -->
+    <div v-if="generatedRankings.length > 0" class="mt-6">
+      <div class="ranking-scroll-container">
+        <div
+          v-for="(ranking, index) in generatedRankings"
+          :key="index"
+          class="ranking-scroll-item"
+        >
+          <div :ref="`rankingContainer_${index}`" class="ranking-container">
+            <div class="ranking-title">
+              <div class="title-badge">TikTok Ranking</div>
+              <h1>{{ getRankingType(ranking.rankingType) }} <span>TOP 10</span></h1>
+              <div class="song-title-container" v-if="ranking.songTitle">
+                <div class="song-title-badge">曲名</div>
+                <div class="song-title-text">{{ ranking.songTitle }}</div>
+              </div>
+              <p>{{ formatDate(selectedDate) }}</p>
             </div>
-            <p>{{ formatDate(selectedDate) }}</p>
-          </div>
-          
-          <div class="ranking-list">
-            <div v-for="(item, index) in topTenItems" :key="item.uniqueId" class="ranking-item">
-              <div class="ranking-position">
-                <span class="position-number">{{ index + 1 }}</span>
-              </div>
-              
-              <div class="ranking-icon">
-                <img :src="item.アイコン" :alt="item.アカウント名" referrerpolicy="no-referrer" />
-              </div>
-              
-              <div class="ranking-details">
-                <div class="account-name">{{ item.ニックネーム || item.アカウント名 }}</div>
-                <div class="account-id">@{{ item.アカウント名 }}</div>
+            
+            <div class="ranking-list">
+              <div v-for="(item, idx) in ranking.items" :key="item.uniqueId" class="ranking-item">
+                <div class="ranking-position">
+                  <span class="position-number">{{ idx + 1 }}</span>
+                </div>
+                
+                <div class="ranking-icon">
+                  <img :src="item.アイコン" :alt="item.アカウント名" referrerpolicy="no-referrer" />
+                </div>
+                
+                <div class="ranking-details">
+                  <div class="account-name">{{ item.ニックネーム || item.アカウント名 }}</div>
+                  <div class="account-id">@{{ item.アカウント名 }}</div>
 
-                <div class="ranking-stats">
-                  <div class="ranking-value">
-                    <span class="value-label">{{ getRankingLabel() }}</span> 
-                    <span class="value-number">{{ formatRankingValue(getRankingValue(item)) }}</span>
+                  <div class="ranking-stats">
+                    <div class="ranking-value">
+                      <span class="value-label">{{ getRankingLabel(ranking.rankingType) }}</span> 
+                      <span class="value-number">{{ formatRankingValue(getRankingValue(item, ranking.rankingType)) }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-          
-          <div class="ranking-footer">
-            <!-- <p>Generated on {{ new Date().toLocaleDateString() }}</p> -->
+            
+            <div class="ranking-footer">
+            </div>
           </div>
         </div>
-      </v-col>
-    </v-row>
+      </div>
+    </div>
     
-    <!-- Snackbar for Errors -->
-    <v-snackbar v-model="snackbar" :timeout="6000" color="error">
+    <!-- Snackbar for Errors/Messages -->
+    <v-snackbar v-model="snackbar" :timeout="6000" :color="snackbarColor">
       {{ snackbarMessage }}
       <v-btn color="white" variant="text" @click="snackbar = false">
         閉じる
       </v-btn>
     </v-snackbar>
+    
+    <!-- プログレスダイアログ -->
+    <v-dialog v-model="processingDialog" persistent max-width="300">
+      <v-card>
+        <v-card-title class="headline">処理中</v-card-title>
+        <v-card-text>
+          <p>{{ processingMessage }}</p>
+          <v-progress-linear
+            indeterminate
+            color="primary"
+            class="mb-0"
+          ></v-progress-linear>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import * as XLSX from 'xlsx'
 import FileUploadButton from './FileUploadButton.vue'
 import { formatDateToYYYYMMDD, formatDateToYYYYMMDDWithSlash } from '../utils/dateUtils'
@@ -129,15 +159,18 @@ interface RankingData {
 
 // データと状態
 const selectedDate = ref('')
-const selectedRankingType = ref('いいね数')
+const selectedRankingTypes = ref<string[]>([]) // 複数選択用の配列
 const tikTokPosts = ref<TikTokPost[]>([])
 const songInfoData = ref<SongInfo[]>([])
 const excelLoaded = ref(false)
 const rankingGenerated = ref(false)
 const workbook = ref<XLSX.WorkBook | null>(null)
-const currentRanking = ref<RankingData | null>(null)
-const currentSongTitle = ref<string>('')
+const generatedRankings = ref<RankingData[]>([]) // 複数のランキングを保持
 const userIconMap = ref<Map<string, string>>(new Map())
+
+// プログレス表示用
+const processingDialog = ref(false)
+const processingMessage = ref('')
 
 // ランキング種類のオプション
 const rankingTypes = [
@@ -149,26 +182,27 @@ const rankingTypes = [
   'フォロワー数'
 ]
 
-// ランキングコンテナの参照
-const rankingContainer = ref<HTMLElement | null>(null)
-
 // Snackbar状態
 const snackbar = ref(false)
 const snackbarMessage = ref('')
+const snackbarColor = ref('error')
 
-// 上位10件のデータ - 生成されたランキングから取得
-const topTenItems = computed(() => {
-  return currentRanking.value?.items || []
-})
+// 現在読み込んでいるファイル名を保持する変数
+const currentFileName = ref<string | null>(null)
 
 // エラー表示関数
 const showError = (message: string) => {
   snackbarMessage.value = message
+  snackbarColor.value = 'error'
   snackbar.value = true
 }
 
-// 現在読み込んでいるファイル名を保持する変数
-const currentFileName = ref<string | null>(null)
+// 成功メッセージ表示関数
+const showSuccess = (message: string) => {
+  snackbarMessage.value = message
+  snackbarColor.value = 'success'
+  snackbar.value = true
+}
 
 // ファイル読み込み処理
 const handleFile = (file: File) => {
@@ -247,86 +281,84 @@ const getSongForDate = (dateStr: string): string => {
   return matchingSong ? matchingSong.楽曲名 : ''
 }
 
-// ランキング生成処理
-const generateRanking = () => {
-  if (!workbook.value || !selectedDate.value) {
-    showError('Excelファイルと日付を選択してください。')
+// 選択されたすべてのランキングを生成する関数
+const generateRankings = async () => {
+  if (!workbook.value || !selectedDate.value || selectedRankingTypes.value.length === 0) {
+    showError('Excelファイル、日付、およびランキング種類を選択してください。')
     return
   }
 
-  const dateStr = formatDateToYYYYMMDD(selectedDate.value)
+  // プログレス表示を開始
+  processingDialog.value = true
+  processingMessage.value = 'ランキングデータを生成中...'
   
-  if (!workbook.value.SheetNames.includes(dateStr)) {
-    showError(`シート "${dateStr}" が見つかりません。`)
-    return
-  }
-
   try {
+    const dateStr = formatDateToYYYYMMDD(selectedDate.value)
+    
+    if (!workbook.value.SheetNames.includes(dateStr)) {
+      processingDialog.value = false
+      showError(`シート "${dateStr}" が見つかりません。`)
+      return
+    }
+
     const sheet = workbook.value.Sheets[dateStr]
     const date = new Date(selectedDate.value)
     
-    console.log(`TikTokRanking: "${dateStr}"シートからTikTokポストデータを抽出します。`);
-    console.log(`TikTokRanking: ユーザーアイコンマップには${userIconMap.value.size}件のデータがあります。`);
-    
-    // TikTokポストの抽出（ユーザーアイコンマップを渡す）
+    // TikTokポストの抽出（再利用するためにここで一度だけ実行）
     tikTokPosts.value = extractTikTokPostData(sheet, date, userIconMap.value)
-    console.log(`TikTokRanking: ${tikTokPosts.value.length}件のTikTokポストデータを抽出しました。`);
-    
-    // 最初の数件のアイコンパスを確認
-    if (tikTokPosts.value.length > 0) {
-      const samplePosts = tikTokPosts.value.slice(0, 3);
-      console.log('TikTokRanking: TikTokポストサンプル（アイコンパス確認用）:', samplePosts.map(post => ({
-        アカウント名: post.アカウント名,
-        アイコン: post.アイコン
-      })));
-    }
     
     // 該当日付の楽曲名を取得
     const songTitle = getSongForDate(selectedDate.value)
     
-    // ランキング種類によるソート
-    const rankingProperty = selectedRankingType.value as keyof TikTokPost
+    // 生成済みのランキングをリセット
+    generatedRankings.value = []
     
-    // 重複ユーザーを除外して上位10件を取得
-    const uniqueUserPosts = removeDuplicateUsers([...tikTokPosts.value])
+    // 選択されたすべてのランキング種類について処理
+    for (const rankingType of selectedRankingTypes.value) {
+      processingMessage.value = `${rankingType}のランキングを生成中...`
+      
+      // ランキング種類によるソート
+      const rankingProperty = rankingType as keyof TikTokPost
+      
+      // 重複ユーザーを除外して上位10件を取得
+      const uniqueUserPosts = removeDuplicateUsers([...tikTokPosts.value])
+      
+      const sortedItems = uniqueUserPosts
+        .sort((a, b) => {
+          const aValue = a[rankingProperty] as number
+          const bValue = b[rankingProperty] as number
+          return bValue - aValue
+        })
+        .slice(0, 10)
+      
+      if (sortedItems.length > 0) {
+        // 生成されたランキングを追加
+        generatedRankings.value.push({
+          items: sortedItems,
+          rankingType: rankingType,
+          songTitle: songTitle
+        })
+      }
+    }
     
-    const sortedItems = uniqueUserPosts
-      .sort((a, b) => {
-        const aValue = a[rankingProperty] as number
-        const bValue = b[rankingProperty] as number
-        return bValue - aValue
-      })
-      .slice(0, 10)
-    
-    if (sortedItems.length === 0) {
+    if (generatedRankings.value.length === 0) {
+      processingDialog.value = false
       showError('ランキングデータが見つかりませんでした。')
       return
     }
     
-    // 現在のランキングとして保存（rankingTypeと曲名も一緒に保存）
-    currentRanking.value = {
-      items: sortedItems,
-      rankingType: selectedRankingType.value,
-      songTitle: songTitle
-    }
-    
-    // 現在の曲名を設定
-    currentSongTitle.value = songTitle
-    
     rankingGenerated.value = true
+    processingDialog.value = false
+    showSuccess(`${generatedRankings.value.length}種類のランキングを生成しました。`)
   } catch (error) {
     console.error('ランキング生成中にエラーが発生しました:', error)
+    processingDialog.value = false
     showError('ランキング生成中にエラーが発生しました。')
   }
 }
 
-// ランキングのタイトルを取得
-const getRankingTitle = () => {
-  return `TikTok ${getRankingLabel()} ランキング TOP10`
-}
-
-// ランキングタイプを取得する関数（新しいタイトル表示用）
-const getRankingType = () => {
+// ランキングタイプの英語表記を取得する関数
+const getRankingType = (rankingType: string) => {
   const labels: Record<string, string> = {
     'いいね数': 'LIKES',
     'コメント数': 'COMMENTS',
@@ -336,12 +368,11 @@ const getRankingType = () => {
     'フォロワー数': 'FOLLOWERS'
   }
   
-  // 現在表示中のランキング種類の英語表示を使用
-  return labels[currentRanking.value?.rankingType || ''] || currentRanking.value?.rankingType || ''
+  return labels[rankingType] || rankingType
 }
 
 // ランキングのラベルを取得
-const getRankingLabel = () => {
+const getRankingLabel = (rankingType: string) => {
   const labels: Record<string, string> = {
     'いいね数': 'いいね',
     'コメント数': 'コメント',
@@ -351,8 +382,7 @@ const getRankingLabel = () => {
     'フォロワー数': 'フォロワー'
   }
   
-  // 現在表示中のランキング種類を使用
-  return labels[currentRanking.value?.rankingType || ''] || currentRanking.value?.rankingType || ''
+  return labels[rankingType] || rankingType
 }
 
 // 日付のフォーマット
@@ -362,17 +392,15 @@ const formatDate = (dateStr: string) => {
 
 // ランキング値のフォーマット
 const formatRankingValue = (value: number) => {
-  // 1000単位でカンマ区切り、または万単位で表示
   if (value >= 10000) {
     return `${(value / 10000).toFixed(1)}万`
   }
   return value.toLocaleString()
 }
 
-// 現在のランキング種類で値を取得
-const getRankingValue = (item: TikTokPost): number => {
-  if (!currentRanking.value) return 0;
-  return item[currentRanking.value.rankingType as keyof TikTokPost] as number;
+// 指定されたランキング種類で値を取得
+const getRankingValue = (item: TikTokPost, rankingType: string): number => {
+  return item[rankingType as keyof TikTokPost] as number;
 }
 
 // 重複ユーザーを除外する関数（アカウント名をキーとして最初の投稿のみ残す）
@@ -380,7 +408,6 @@ const removeDuplicateUsers = (posts: TikTokPost[]): TikTokPost[] => {
   const uniqueUsers = new Map<string, TikTokPost>()
   
   posts.forEach(post => {
-    // アカウント名がまだMapに存在しない場合のみ追加
     if (!uniqueUsers.has(post.アカウント名)) {
       uniqueUsers.set(post.アカウント名, post)
     }
@@ -389,69 +416,144 @@ const removeDuplicateUsers = (posts: TikTokPost[]): TikTokPost[] => {
   return Array.from(uniqueUsers.values())
 }
 
-// ランキング画像のエクスポート処理
-const exportRanking = async () => {
-  if (!rankingContainer.value || !currentRanking.value) {
+// 単一ランキングの画像をエクスポートする関数
+const exportSingleRanking = async (index: number) => {
+  const containerRef = document.querySelector(`.ranking-container:nth-child(${index + 1})`) as HTMLElement;
+  
+  if (!containerRef) {
     showError('ランキングコンテナが見つかりません。')
     return
   }
   
   try {
-    // html2canvasのオプションを詳細に設定
-    const canvas = await html2canvas(rankingContainer.value, {
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      scale: 2, // 高解像度化
-      logging: false,
-      removeContainer: false,
-      foreignObjectRendering: false, // 外部オブジェクトレンダリングを無効化
-      onclone: (clonedDoc) => {
-        // クローンされたDOMでスタイルを上書き - より確実にレンダリングするため
-        const clonedContainer = clonedDoc.querySelector('.ranking-container')
-        if (clonedContainer && clonedContainer instanceof HTMLElement) {
-          clonedContainer.style.boxShadow = 'none' // 影を削除
-        }
-        
-        // グラデーションなどの問題のある要素を修正
-        const valueNumbers = clonedDoc.querySelectorAll('.value-number')
-        valueNumbers.forEach(el => {
-          if (el instanceof HTMLElement) {
-            el.style.color = '#4361EE'
-            el.style.background = 'none'
-          }
-        })
-        
-        // タイトルのスパン要素も修正
-        const titleSpans = clonedDoc.querySelectorAll('.ranking-title h1 span')
-        titleSpans.forEach(el => {
-          if (el instanceof HTMLElement) {
-            el.style.color = '#4361EE'
-            el.style.background = 'none'
-          }
-        })
-      }
-    })
+    processingDialog.value = true
+    processingMessage.value = `${generatedRankings.value[index].rankingType}のランキング画像を保存中...`
     
-    // 画像としてダウンロード
-    const link = document.createElement('a')
-    link.download = `ranking_${currentRanking.value.rankingType}_${formatDateToYYYYMMDD(selectedDate.value)}.png`
-    link.href = canvas.toDataURL('image/png')
-    link.click()
+    await exportRankingImage(containerRef, generatedRankings.value[index].rankingType)
+    
+    processingDialog.value = false
+    showSuccess(`${generatedRankings.value[index].rankingType}のランキング画像を保存しました。`)
   } catch (error) {
     console.error('ランキング画像のエクスポート中にエラーが発生しました:', error)
+    processingDialog.value = false
     showError('ランキング画像のエクスポート中にエラーが発生しました。')
   }
+}
+
+// すべてのランキング画像をエクスポートする関数
+const exportAllRankings = async () => {
+  if (generatedRankings.value.length === 0) {
+    showError('保存するランキングがありません。')
+    return
+  }
+  
+  processingDialog.value = true
+  processingMessage.value = 'すべてのランキング画像を保存中...'
+  
+  try {
+    // 各ランキングを順番に処理
+    for (let i = 0; i < generatedRankings.value.length; i++) {
+      const rankingType = generatedRankings.value[i].rankingType
+      processingMessage.value = `${rankingType}のランキング画像を保存中... (${i + 1}/${generatedRankings.value.length})`
+      
+      const containerRef = document.querySelectorAll('.ranking-container')[i] as HTMLElement
+      if (containerRef) {
+        await exportRankingImage(containerRef, rankingType)
+        // 少し待機して連続ダウンロードによるブラウザの制限を回避
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+    }
+    
+    processingDialog.value = false
+    showSuccess(`${generatedRankings.value.length}種類のランキング画像を保存しました。`)
+  } catch (error) {
+    console.error('ランキング画像のエクスポート中にエラーが発生しました:', error)
+    processingDialog.value = false
+    showError('ランキング画像のエクスポート中にエラーが発生しました。')
+  }
+}
+
+// ランキング画像のエクスポート処理（共通関数）
+const exportRankingImage = async (containerElement: HTMLElement, rankingType: string) => {
+  // html2canvasのオプションを詳細に設定
+  const canvas = await html2canvas(containerElement, {
+    useCORS: true,
+    allowTaint: true,
+    backgroundColor: '#ffffff',
+    scale: 2, // 高解像度化
+    logging: false,
+    removeContainer: false,
+    foreignObjectRendering: false,
+    onclone: (clonedDoc) => {
+      // クローンされたDOMでスタイルを上書き - より確実にレンダリングするため
+      const clonedContainer = clonedDoc.querySelector('.ranking-container')
+      if (clonedContainer && clonedContainer instanceof HTMLElement) {
+        clonedContainer.style.boxShadow = 'none' // 影を削除
+      }
+      
+      // グラデーションなどの問題のある要素を修正
+      const valueNumbers = clonedDoc.querySelectorAll('.value-number')
+      valueNumbers.forEach(el => {
+        if (el instanceof HTMLElement) {
+          el.style.color = '#4361EE'
+          el.style.background = 'none'
+        }
+      })
+      
+      const titleSpans = clonedDoc.querySelectorAll('.ranking-title h1 span')
+      titleSpans.forEach(el => {
+        if (el instanceof HTMLElement) {
+          el.style.color = '#4361EE'
+          el.style.background = 'none'
+        }
+      })
+    }
+  })
+  
+  // 画像としてダウンロード
+  const link = document.createElement('a')
+  link.download = `ranking_${rankingType}_${formatDateToYYYYMMDD(selectedDate.value)}.png`
+  link.href = canvas.toDataURL('image/png')
+  link.click()
 }
 </script>
 
 <style scoped>
+.ranking-type-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+}
+
+.ranking-checkbox {
+  width: auto;
+  margin-right: 12px;
+}
+
+.ranking-scroll-container {
+  display: flex;
+  overflow-x: auto;
+  padding: 20px 10px;
+  gap: 20px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ranking-scroll-item {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  margin-bottom: 20px;
+}
+
 .ranking-container {
   background-color: #f5f7fc;
   color: #111;
-  border-radius: 32px;
+  border-radius: 0; /* 0に変更して四角形にする */
   padding: 40px; 
-  max-width: 600px;
+  width: 600px;
   margin: 0 auto;
   box-shadow: 
     0 30px 60px rgba(0, 0, 0, 0.03),
@@ -508,7 +610,7 @@ const exportRanking = async () => {
 
 .ranking-list {
   display: grid;
-  grid-template-columns: 1fr; /* 2カラムから1カラムに変更 */
+  grid-template-columns: 1fr;
   gap: 24px;
   margin-bottom: 24px;
 }
