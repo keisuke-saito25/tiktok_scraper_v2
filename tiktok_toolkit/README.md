@@ -33,3 +33,9 @@
     ```bash
     python3 tiktok.py
     ```
+
+## ビルド方法
+
+    ```bash
+    pyinstaller --onefile tiktok.py
+    ```
