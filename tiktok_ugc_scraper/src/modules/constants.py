@@ -6,6 +6,8 @@ MAX_URLS_TO_PROCESS: int = 3 # デバッグ用
 # scraper.py
 UGC_COUNT_XPATH: str = '//*[@id="main-content-single_song"]/div/div[1]/div[1]/div[2]/h2[2]/strong'
 WEBDRIVER_WAIT_TIME: int = 10  # 秒
+MAX_RETRIES: int = 3  # 最大リトライ回数
+RETRY_DELAY: int = 5  # リトライ間の基本待機時間（秒）
 
 # excel_utils.py 
 ALERT_CELL: str = 'B1'

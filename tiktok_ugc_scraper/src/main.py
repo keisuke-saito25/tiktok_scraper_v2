@@ -40,11 +40,17 @@ def process_mode(workbook, driver):
         logging.warning("曲名とURLのマップを取得できませんでした。処理を中断します。")
         return
 
+    from modules.constants import MAX_RETRIES, RETRY_DELAY
+    
     for idx, (song, url) in enumerate(song_url_map.items(), start=1):
         logging.info("曲 %d (%s) のUGC数取得を開始します。URL: %s", idx, song, url)
         try:
-            ugc_count = get_ugc_count(driver, url)
-            logging.info("曲 '%s' のUGC数: %d", song, ugc_count)
+            # リトライ機能を有効化して実行
+            ugc_count = get_ugc_count(driver, url, max_retries=MAX_RETRIES, retry_delay=RETRY_DELAY)
+            if ugc_count != "取得失敗":
+                logging.info("曲 '%s' のUGC数: %d", song, ugc_count)
+            else:
+                logging.warning("曲 '%s' のUGC数取得に失敗しました。", song)
         except Exception as e:
             logging.error("曲 '%s' のUGC数取得中にエラーが発生しました: %s", song, e)
             ugc_count = "取得失敗"
@@ -89,6 +95,8 @@ def retry_mode(workbook, driver):
         logging.error("Excelファイルの再読み込みに失敗しました: %s", e)
         return
 
+    from modules.constants import MAX_RETRIES, RETRY_DELAY
+    
     try:
         for entry in failed_entries:
             row = entry['row']
@@ -97,8 +105,12 @@ def retry_mode(workbook, driver):
             logging.info("曲 '%s' のUGC数再取得を開始します。URL: %s", song, url)
 
             try:
-                ugc_count = get_ugc_count(driver, url)
-                logging.info("曲 '%s' のUGC数: %d", song, ugc_count)
+                # リトライ機能を有効化して実行
+                ugc_count = get_ugc_count(driver, url, max_retries=MAX_RETRIES, retry_delay=RETRY_DELAY)
+                if ugc_count != "取得失敗":
+                    logging.info("曲 '%s' のUGC数: %d", song, ugc_count)
+                else:
+                    logging.warning("曲 '%s' のUGC数再取得に失敗しました。", song)
             except Exception as e:
                 logging.error("曲 '%s' のUGC数再取得中にエラーが発生しました: %s", song, e)
                 ugc_count = "取得失敗"
@@ -121,7 +133,6 @@ def retry_mode(workbook, driver):
 
     finally:
         workbook_update.close()
-
 def main():
     parser = argparse.ArgumentParser(description="UGCデータ処理スクリプト")
     parser.add_argument(
