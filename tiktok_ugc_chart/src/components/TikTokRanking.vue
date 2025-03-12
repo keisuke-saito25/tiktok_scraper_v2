@@ -75,7 +75,8 @@
         >
           <div :ref="`rankingContainer_${index}`" class="ranking-container">
             <div class="ranking-title">
-              <div class="title-badge">TikTok Ranking</div>
+              <!-- 修正依頼で削除↓ -->
+              <!-- <div class="title-badge">TikTok Ranking</div> -->
               <h1>{{ getRankingType(ranking.rankingType) }} <span>TOP 10</span></h1>
               <div class="song-title-container" v-if="ranking.songTitle">
                 <div class="song-title-badge">曲名</div>
@@ -95,17 +96,21 @@
                 </div>
                 
                 <div class="ranking-details">
-                  <div class="account-name" :title="item.ニックネーム || item.アカウント名">
-                    {{ truncateNickname(item.ニックネーム || item.アカウント名) }}
-                  </div>
-                  <div class="account-id" :title="'@' + item.アカウント名">
-                    @{{ truncateAccountName(item.アカウント名) }}
-                  </div>
-
-                  <div class="ranking-stats">
-                    <div class="ranking-value">
-                      <span class="value-label">{{ getRankingLabel(ranking.rankingType) }}</span> 
-                      <span class="value-number">{{ formatRankingValue(getRankingValue(item, ranking.rankingType)) }}</span>
+                  <div class="account-info">
+                    <div class="account-container">
+                      <div class="account-name" :title="item.ニックネーム || item.アカウント名">
+                        {{ truncateNickname(item.ニックネーム || item.アカウント名) }}
+                      </div>
+                      <div class="account-id" :title="'@' + item.アカウント名">
+                        @{{ truncateAccountName(item.アカウント名) }}
+                      </div>
+                    </div>
+                    
+                    <div class="ranking-stats">
+                      <div class="ranking-value">
+                        <span class="value-label">{{ getRankingLabel(ranking.rankingType) }}</span> 
+                        <span class="value-number">{{ formatRankingValue(getRankingValue(item, ranking.rankingType)) }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -477,42 +482,138 @@ const exportAllRankings = async () => {
   }
 }
 
-// ランキング画像のエクスポート処理（共通関数）
-const exportRankingImage = async (containerElement: HTMLElement, rankingType: string) => {
-  // 既存のスタイルをキャプチャ
-  const originalStyles = window.getComputedStyle(containerElement);
+// 1. まず、現在の表示を取得するためのユーティリティ関数を追加します
+const getComputedDisplayText = (element: HTMLElement): string => {
+  // 要素のコピーを作成して非表示で追加
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.style.position = 'absolute';
+  clone.style.visibility = 'hidden';
+  clone.style.pointerEvents = 'none';
+  document.body.appendChild(clone);
   
-  // html2canvasのオプションを詳細に設定
-  const canvas = await html2canvas(containerElement, {
-    useCORS: true,
-    allowTaint: true,
-    backgroundColor: '#ffffff',
-    scale: 2, // 高解像度化
-    logging: false,
-    removeContainer: false,
-    foreignObjectRendering: false
-  })
+  // CSSで省略された表示テキストを取得する
+  // これはCSSの省略が適用された後の見た目を近似します
+  const displayWidth = clone.offsetWidth;
+  const fullText = element.textContent || '';
+  let result = '';
+  let currentWidth = 0;
   
-  // 画像としてダウンロード
-  const link = document.createElement('a')
-  link.download = `ranking_${rankingType}_${formatDateToYYYYMMDD(selectedDate.value)}.png`
-  link.href = canvas.toDataURL('image/png')
-  link.click()
-}
+  // フォントの特性に基づいてより正確な幅を計算するには、
+  // canvas要素を使って文字幅を測定することもできます
+  const tempCanvas = document.createElement('canvas');
+  const context = tempCanvas.getContext('2d');
+  const computedStyle = window.getComputedStyle(element);
+  const fontStyle = computedStyle.font; // computedStyle.fontでCSSフォント文字列を取得
+  
+  if (context) {
+    context.font = fontStyle;
+    
+    for (let i = 0; i < fullText.length; i++) {
+      const char = fullText.charAt(i);
+      const charWidth = context.measureText(char).width;
+      
+      if (currentWidth + charWidth > displayWidth) {
+        result += '…';
+        break;
+      }
+      
+      result += char;
+      currentWidth += charWidth;
+    }
+  }
+  
+  // クリーンアップ
+  document.body.removeChild(clone);
+  
+  return result;
+};
 
-// ニックネームを適切な長さに省略する関数（日本語と英数字の幅の違いを考慮）
-const truncateNickname = (text: string, maxLength = 20): string => {
+// 2. exportRankingImage関数を修正します
+const exportRankingImage = async (containerElement: HTMLElement, rankingType: string) => {
+  try {
+    // html2canvasを実行する前に、すべてのaccount-name要素を処理する
+    const accountNameElements = containerElement.querySelectorAll('.account-name');
+    
+    // 各要素のスタイルとテキストをキャプチャしておく（後で復元するため）
+    const originalStates = Array.from(accountNameElements).map(element => {
+      const htmlElement = element as HTMLElement;
+      return {
+        element: htmlElement,
+        textContent: htmlElement.textContent,
+        title: htmlElement.getAttribute('title'),
+        overflow: htmlElement.style.overflow,
+        textOverflow: htmlElement.style.textOverflow,
+        whiteSpace: htmlElement.style.whiteSpace,
+        width: htmlElement.style.width
+      };
+    });
+    
+    // 各要素の視覚的に表示されているテキストを取得して設定する
+    accountNameElements.forEach(element => {
+      const htmlElement = element as HTMLElement;
+      
+      // 実際に画面に表示されているテキストと同じになるように
+      // htmlElement.textContent = getComputedDisplayText(htmlElement);
+      
+      // より確実な方法：実際にブラウザで表示されているものに合わせる
+      // Vue.js の DOM 更新が確実に完了していることを確認
+      // 表示上短いテキストを使用（一般的に "だえん🧶￤編み物…" のような形式）
+      const originalText = htmlElement.getAttribute('title') || '';
+      htmlElement.textContent = truncateNickname(originalText);
+      
+      // テキストが途切れないようにCSSプロパティを設定
+      htmlElement.style.overflow = 'visible';
+      htmlElement.style.textOverflow = 'clip';
+      htmlElement.style.whiteSpace = 'normal';
+      htmlElement.style.width = 'auto';
+    });
+    
+    // html2canvasの実行
+    const canvas = await html2canvas(containerElement, {
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      scale: 2, // 高解像度化
+      logging: false,
+      removeContainer: false,
+      foreignObjectRendering: false
+    });
+    
+    // 元の状態に戻す
+    originalStates.forEach(state => {
+      const { element, textContent, title, overflow, textOverflow, whiteSpace, width } = state;
+      element.textContent = textContent;
+      if (title) element.setAttribute('title', title);
+      element.style.overflow = overflow;
+      element.style.textOverflow = textOverflow;
+      element.style.whiteSpace = whiteSpace;
+      element.style.width = width;
+    });
+    
+    // 画像としてダウンロード
+    const link = document.createElement('a');
+    link.download = `ranking_${rankingType}_${formatDateToYYYYMMDD(selectedDate.value)}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  } catch (error) {
+    console.error('ランキング画像のエクスポート中にエラーが発生しました:', error);
+    throw error;
+  }
+};
+
+// 3. truncateNickname関数も調整が必要かもしれません
+// maxLengthパラメータを小さくして、表示されるテキストが短くなるようにします
+// 現在のCSSでの表示に合わせて調整してください
+const truncateNickname = (text: string, maxLength = 16): string => { // 20から16に変更
   if (!text) return '';
   
-  // 文字列の表示幅を概算する (日本語は2、英数字は1と仮定)
   let displayWidth = 0;
   let truncatedText = '';
   
   for (let i = 0; i < text.length; i++) {
-    // 日本語やその他の全角文字は幅が広い
     const charCode = text.charCodeAt(i);
     const charWidth = (charCode >= 0x3000 && charCode <= 0x9FFF) ||
-                     (charCode >= 0xFF00 && charCode <= 0xFFEF) ? 2 : 1;
+                       (charCode >= 0xFF00 && charCode <= 0xFFEF) ? 2 : 1;
                      
     displayWidth += charWidth;
     
@@ -565,15 +666,14 @@ const truncateAccountName = (text: string, maxLength = 16): string => {
 .ranking-scroll-item {
   flex: 0 0 auto;
   scroll-snap-align: start;
-  margin-bottom: 20px;
 }
 
 .ranking-container {
   background-color: #f5f7fc;
   color: #111;
-  border-radius: 0; /* 0に変更して四角形にする */
-  padding: 40px; 
-  width: 600px;
+  border-radius: 0;
+  padding: 10px; /* 修正依頼で全体の上下幅狭く */
+  width: 700px; 
   margin: 0 auto;
   box-shadow: 
     0 30px 60px rgba(0, 0, 0, 0.03),
@@ -585,7 +685,7 @@ const truncateAccountName = (text: string, maxLength = 16): string => {
 
 .ranking-title {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 30px;
   position: relative;
 }
 
@@ -628,8 +728,7 @@ const truncateAccountName = (text: string, maxLength = 16): string => {
 .ranking-list {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: 4px; /* 修正依頼でカード毎の間隔狭く */
 }
 
 .ranking-item {
@@ -637,7 +736,7 @@ const truncateAccountName = (text: string, maxLength = 16): string => {
   align-items: center;
   background-color: #ffffff;
   border-radius: 24px;
-  padding: 24px 28px;
+  padding: 4px 28px; /* 修正依頼で上下余白狭く */
   position: relative;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.8);
@@ -646,7 +745,7 @@ const truncateAccountName = (text: string, maxLength = 16): string => {
     0 10px 25px rgba(0, 0, 0, 0.03),
     0 6px 12px rgba(0, 0, 0, 0.05);
   width: 100%;
-  max-width: 500px;
+  max-width: 600px; /* 500pxから600pxに増加 */
   margin: 0 auto;
 }
 
@@ -714,7 +813,7 @@ const truncateAccountName = (text: string, maxLength = 16): string => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
+  width: 100%; /* 幅を100%に設定 */
   letter-spacing: -0.01em;
 }
 
@@ -761,32 +860,59 @@ const truncateAccountName = (text: string, maxLength = 16): string => {
   max-width: 300px;
 }
 
-.ranking-stats {
-  display: flex;
+.account-info {
+  display: grid;
+  grid-template-columns: minmax(0, 250px) auto; /* 左側最大250px・右側自動調整のグリッド */
   align-items: center;
+  width: 100%;
+  gap: 10px; /* 列間の間隔 */
+}
+
+.account-container {
+  max-width: 250px; /* ニックネーム部分の最大幅 */
+  min-width: 0; /* グリッド内での最小幅を0に設定して省略を可能に */
+  overflow: hidden; /* はみ出した内容を隠す */
+}
+
+.ranking-stats {
+  justify-self: end; /* グリッド内で右寄せ */
+  text-align: right;
+  min-width: 160px; /* 最小幅を確保 */
 }
 
 .ranking-value {
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  justify-content: center; /* flex-endから中央揃えに変更 */
   background: rgba(106, 90, 255, 0.08);
   padding: 8px 18px;
   border-radius: 100px;
-  display: inline-flex;
-  align-items: center;
   position: relative;
   border: 1px solid rgba(106, 90, 255, 0.15);
   box-shadow: 0 4px 8px rgba(106, 90, 255, 0.05);
+  white-space: nowrap; /* 改行を防止 */
+  min-width: 160px; /* 最小幅を確保 */
 }
 
+/* ラベルと数値が分離しないようにする */
+.value-label, .value-number {
+  display: inline-block; /* インラインブロック要素に */
+  white-space: nowrap; /* 改行を防止 */
+}
+
+/* ラベルのスタイル調整 */
 .value-label {
   color: #5c5c7c;
   font-weight: 600;
   font-size: 14px;
+  margin-right: 8px; /* 間隔を確保 */
 }
 
+/* 数値のスタイル調整 */
 .value-number {
   font-weight: 800;
   color: #4361EE;
-  margin-left: 8px;
   font-size: 20px;
   letter-spacing: -0.02em;
 }
@@ -806,10 +932,12 @@ const truncateAccountName = (text: string, maxLength = 16): string => {
   background: rgba(255, 247, 232, 0.85);
   border-left: 3px solid #FF9500;
 }
-
+.ranking-item:nth-child(n+4) .ranking-position {
+  background: #ecbe33; 
+  color: #FFFFFF;
+}
 /* フッター部分 */
 .ranking-footer {
-  margin-top: 40px;
   text-align: center;
   font-size: 14px;
   color: #8e8e93;
