@@ -482,7 +482,6 @@ const exportAllRankings = async () => {
   }
 }
 
-// 1. まず、現在の表示を取得するためのユーティリティ関数を追加します
 const getComputedDisplayText = (element: HTMLElement): string => {
   // 要素のコピーを作成して非表示で追加
   const clone = element.cloneNode(true) as HTMLElement;
@@ -528,7 +527,6 @@ const getComputedDisplayText = (element: HTMLElement): string => {
   return result;
 };
 
-// 2. exportRankingImage関数を修正します
 const exportRankingImage = async (containerElement: HTMLElement, rankingType: string) => {
   try {
     // html2canvasを実行する前に、すべてのaccount-name要素を処理する
@@ -933,8 +931,9 @@ const truncateAccountName = (text: string, maxLength = 16): string => {
   border-left: 3px solid #FF9500;
 }
 .ranking-item:nth-child(n+4) .ranking-position {
-  background: #ecbe33; 
-  color: #FFFFFF;
+  background: #7da87f; /* 彩度を下げた緑系の背景色 */
+  color: #FFFFFF; /* 白色の文字色 */
+  box-shadow: 0 8px 16px rgba(125, 168, 127, 0.2);
 }
 /* フッター部分 */
 .ranking-footer {
