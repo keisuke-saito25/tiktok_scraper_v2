@@ -491,7 +491,7 @@ const getComputedDisplayText = (element: HTMLElement): string => {
   document.body.appendChild(clone);
   
   // CSSで省略された表示テキストを取得する
-  // これはCSSの省略が適用された後の見た目を近似します
+  // これはCSSの省略が適用された後の見た目を近似
   const displayWidth = clone.offsetWidth;
   const fullText = element.textContent || '';
   let result = '';
@@ -531,40 +531,74 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
   try {
     // html2canvasを実行する前に、すべてのaccount-name要素を処理する
     const accountNameElements = containerElement.querySelectorAll('.account-name');
+    const accountIdElements = containerElement.querySelectorAll('.account-id');
     
-    // 各要素のスタイルとテキストをキャプチャしておく（後で復元するため）
-    const originalStates = Array.from(accountNameElements).map(element => {
-      const htmlElement = element as HTMLElement;
-      return {
-        element: htmlElement,
-        textContent: htmlElement.textContent,
-        title: htmlElement.getAttribute('title'),
-        overflow: htmlElement.style.overflow,
-        textOverflow: htmlElement.style.textOverflow,
-        whiteSpace: htmlElement.style.whiteSpace,
-        width: htmlElement.style.width
-      };
-    });
+    // すべての対象要素のスタイルとテキストをキャプチャしておく
+    const originalStates = [
+      ...Array.from(accountNameElements).map(element => {
+        const htmlElement = element as HTMLElement;
+        return {
+          element: htmlElement,
+          textContent: htmlElement.textContent,
+          title: htmlElement.getAttribute('title'),
+          overflow: htmlElement.style.overflow,
+          textOverflow: htmlElement.style.textOverflow,
+          whiteSpace: htmlElement.style.whiteSpace,
+          width: htmlElement.style.width
+        };
+      }),
+      ...Array.from(accountIdElements).map(element => {
+        const htmlElement = element as HTMLElement;
+        return {
+          element: htmlElement,
+          textContent: htmlElement.textContent,
+          title: htmlElement.getAttribute('title'),
+          overflow: htmlElement.style.overflow,
+          textOverflow: htmlElement.style.textOverflow,
+          whiteSpace: htmlElement.style.whiteSpace,
+          width: htmlElement.style.width
+        };
+      })
+    ];
     
-    // 各要素の視覚的に表示されているテキストを取得して設定する
+    // 各アカウント名要素のテキストを置換
     accountNameElements.forEach(element => {
       const htmlElement = element as HTMLElement;
-      
-      // 実際に画面に表示されているテキストと同じになるように
-      // htmlElement.textContent = getComputedDisplayText(htmlElement);
-      
-      // より確実な方法：実際にブラウザで表示されているものに合わせる
-      // Vue.js の DOM 更新が確実に完了していることを確認
-      // 表示上短いテキストを使用（一般的に "だえん🧶￤編み物…" のような形式）
       const originalText = htmlElement.getAttribute('title') || '';
-      htmlElement.textContent = truncateNickname(originalText);
       
-      // テキストが途切れないようにCSSプロパティを設定
-      htmlElement.style.overflow = 'visible';
-      htmlElement.style.textOverflow = 'clip';
-      htmlElement.style.whiteSpace = 'normal';
-      htmlElement.style.width = 'auto';
+      // HTMLエンティティをデコードして処理（&amp; → &）に変換
+      const decodedText = decodeHTML(originalText);
+      const truncatedText = truncateNickname(decodedText, 14); // 少し短めに切り詰め
+      
+      // HTML特殊文字を含むテキストの場合、textContentへの設定前にエンコード
+      htmlElement.textContent = truncatedText;
+      
+      // スタイル設定 - 重要: 改行されないようにする
+      htmlElement.style.overflow = 'hidden'; 
+      htmlElement.style.textOverflow = 'ellipsis';
+      htmlElement.style.whiteSpace = 'nowrap';
+      htmlElement.style.maxWidth = '220px';   // 固定幅を設定
     });
+    
+    // アカウントID要素も同様に処理
+    accountIdElements.forEach(element => {
+      const htmlElement = element as HTMLElement;
+      const originalText = htmlElement.getAttribute('title') || '';
+      const truncatedText = truncateAccountName(originalText.replace('@', ''), 14);
+      
+      htmlElement.textContent = '@' + truncatedText;
+      htmlElement.style.overflow = 'hidden';
+      htmlElement.style.textOverflow = 'ellipsis';
+      htmlElement.style.whiteSpace = 'nowrap';
+      htmlElement.style.maxWidth = '220px';
+    });
+    
+    // HTMLエンティティをデコードする関数
+    function decodeHTML(html: string): string {
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = html;
+      return textarea.value;
+    }
     
     // html2canvasの実行
     const canvas = await html2canvas(containerElement, {
@@ -599,20 +633,40 @@ const exportRankingImage = async (containerElement: HTMLElement, rankingType: st
   }
 };
 
-// 3. truncateNickname関数も調整が必要かもしれません
-// maxLengthパラメータを小さくして、表示されるテキストが短くなるようにします
-// 現在のCSSでの表示に合わせて調整してください
-const truncateNickname = (text: string, maxLength = 16): string => { // 20から16に変更
+const truncateNickname = (text: string, maxLength = 14): string => { 
   if (!text) return '';
   
   let displayWidth = 0;
   let truncatedText = '';
   
-  for (let i = 0; i < text.length; i++) {
-    const charCode = text.charCodeAt(i);
-    const charWidth = (charCode >= 0x3000 && charCode <= 0x9FFF) ||
-                       (charCode >= 0xFF00 && charCode <= 0xFFEF) ? 2 : 1;
-                     
+  // 絵文字を含む文字列を正確に処理するため、配列に変換
+  // 絵文字は複数のコードポイントで構成されるため、単純なcharAtではなくスプレッド演算子を使用
+  const chars = [...text];
+  
+  for (let i = 0; i < chars.length; i++) {
+    const char = chars[i];
+    
+    // 絵文字や特殊文字の幅を評価（簡易的な方法）
+    let charWidth = 1;
+    
+    // 東アジア圏の文字（CJK）
+    const code = char.codePointAt(0) || 0;
+    if ((code >= 0x3000 && code <= 0x9FFF) || 
+        (code >= 0xFF00 && code <= 0xFFEF)) {
+      charWidth = 2;
+    }
+    
+    // 絵文字の場合も幅を広めに取る
+    if (/\p{Emoji}/u.test(char)) {
+      charWidth = 2;
+    }
+    
+    // 結合文字やZWJ絵文字の場合は、前の文字と合わせて1つとみなす
+    // （簡易的な実装）
+    if (i > 0 && /[\u200D\u0300-\u036F\u1AB0-\u1AFF\u1DC0-\u1DFF]/.test(char)) {
+      charWidth = 0;
+    }
+    
     displayWidth += charWidth;
     
     if (displayWidth > maxLength) {
@@ -620,16 +674,15 @@ const truncateNickname = (text: string, maxLength = 16): string => { // 20から
       break;
     }
     
-    truncatedText += text.charAt(i);
+    truncatedText += char;
   }
   
   return truncatedText;
 }
 
-// アカウント名も同様に省略する関数
-const truncateAccountName = (text: string, maxLength = 16): string => {
+const truncateAccountName = (text: string, maxLength = 14): string => {
   if (!text) return '';
-  // 省略
+  
   if (text.length > maxLength) {
     return text.substring(0, maxLength - 1) + '…';
   }
