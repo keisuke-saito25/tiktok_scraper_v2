@@ -27,7 +27,7 @@ def read_song_urls(workbook):
     ExcelファイルのA列とB列から曲名とURLのマップを読み取る関数
     """
     try:
-        sheet = workbook.active
+        sheet = workbook["楽曲マスタ"] if "楽曲マスタ" in workbook.sheetnames else workbook.active
         song_url_map = {}
         song_column = 'A'
         url_column = 'B'
@@ -56,7 +56,7 @@ def read_alert_value(workbook):
     B1セルからアラートの基準値を読み込む関数
     """
     try:
-        sheet = workbook.active
+        sheet = workbook["楽曲マスタ"] if "楽曲マスタ" in workbook.sheetnames else workbook.active
         b1_value = sheet[ALERT_CELL].value
 
         if b1_value is None:
@@ -82,7 +82,7 @@ def read_urls(workbook):
     ExcelファイルのB4セルから下にあるURLを全て読み取る関数
     """
     try:
-        sheet = workbook.active
+        sheet = workbook["楽曲マスタ"] if "楽曲マスタ" in workbook.sheetnames else workbook.active
         urls = []
         column = URL_COLUMN
         header = sheet[f'{column}{HEADER_ROW}'].value
