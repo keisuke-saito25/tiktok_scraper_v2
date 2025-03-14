@@ -41,7 +41,6 @@ const canvas = ref<HTMLCanvasElement | null>(null)
 const chartContainer = ref<HTMLElement | null>(null)
 let chartInstance: Chart | null = null
 
-// アイコンの位置管理をオブジェクトに変更
 const iconPositions = ref<Record<string, { x: number, y: number }>>({})
 
 // ロード済みの投稿を管理するリスト

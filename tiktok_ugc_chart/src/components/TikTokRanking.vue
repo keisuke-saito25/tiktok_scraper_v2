@@ -19,7 +19,6 @@
       </v-col>
       
       <v-col cols="12" sm="6" md="6">
-        <!-- 複数選択に変更 -->
         <div class="ranking-type-checkboxes">
           <h3 class="subtitle-1 mb-2">ランキング種類（複数選択可）</h3>
           <v-checkbox
@@ -935,7 +934,7 @@ const truncateAccountName = (text: string, maxLength = 14): string => {
   display: inline-flex;
   align-items: center;
   width: 100%;
-  justify-content: center; /* flex-endから中央揃えに変更 */
+  justify-content: center;
   background: rgba(106, 90, 255, 0.08);
   padding: 8px 18px;
   border-radius: 100px;
