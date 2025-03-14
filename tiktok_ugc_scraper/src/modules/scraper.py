@@ -45,6 +45,16 @@ def get_ugc_count(driver, url, max_retries=3, retry_delay=5):
             )
             total_ugc_text = total_ugc_element.text.replace('本の動画', '').replace(',', '').strip()
             total_ugc = parse_number(total_ugc_text)
+
+            if total_ugc is None:  # パースに失敗した場合
+                logging.warning("URL: %s | UGC数の解析に失敗しました: %s", url, total_ugc_text)
+                if attempt < max_retries:
+                    logging.info("リトライします... (%d/%d)", attempt + 1, max_retries)
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                else:
+                    return "取得失敗"
+
             logging.info("URL: %s | 取得したUGC数: %d", url, total_ugc)
             return total_ugc
             
