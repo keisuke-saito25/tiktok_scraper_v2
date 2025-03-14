@@ -29,6 +29,12 @@ def get_ugc_count(driver, url, max_retries=3, retry_delay=5):
     for attempt in range(max_retries + 1):  # 初回 + リトライ回数
         try:
             driver.get(url)
+
+            # ページの読み込みが完了するまで待機
+            WebDriverWait(driver, WEBDRIVER_WAIT_TIME).until(
+                lambda d: d.execute_script('return document.readyState') == 'complete'
+            )
+            
             # ランダムな待機時間（ブロック対策）
             time.sleep(random.uniform(1, 3))
             
