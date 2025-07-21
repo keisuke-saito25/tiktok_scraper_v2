@@ -75,8 +75,11 @@ def clean_logs():
         if filename.startswith('app.log'):
             filepath = os.path.join(log_dir, filename)
             if os.stat(filepath).st_mtime < now - 7 * 86400:
-                os.remove(filepath)
-
+                try:
+                    os.remove(filepath)
+                except PermissionError:
+                    print(f"Cannot delete {filepath}: File is in use.")
+                    
 clean_logs()
 
 def read_initial_settings():
@@ -138,8 +141,8 @@ def init_driver(headless=False, for_function1=False):
     if for_function1:
         # chrome_options.add_argument("--blink-settings=imagesEnabled=false")
         chrome_options.add_argument("--disable-extensions")
-    extension_path = os.path.abspath('vidIQ.crx')
-    chrome_options.add_extension(extension_path)
+    # extension_path = os.path.abspath('vidIQ.crx')
+    # chrome_options.add_extension(extension_path)
     
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--disable-gpu")  # GPUの使用を制限
@@ -328,10 +331,10 @@ def update_music_info_sheet(driver, workbook, song_name, song_url, excel_filenam
 
     try:
         total_ugc_element = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, '//*[@id="main-content-single_song"]/div/div[1]/div[1]/div[2]/h2[2]/strong'))
+            EC.presence_of_element_located((By.XPATH, '//*[@data-e2e="music-video-count"]'))
         )
         # 「本の動画」を削除して数値に変換
-        total_ugc = parse_number(total_ugc_element.text.replace('本の動画', '').replace(',', '').strip())
+        total_ugc = parse_number(total_ugc_element.text.replace('動画', '').replace(',', '').strip())
     except TimeoutException:
         total_ugc = 0
         logging.error('総UGC数の取得中にエラーが発生しました')
@@ -391,81 +394,58 @@ def create_or_clear_date_sheet(workbook):
     return sheet
 
 def get_video_urls(driver, max_items, timeout=10):
-    video_urls = []  # 順序を保持するためのリスト
-    seen_urls = set()  # 重複を検出するためのセット
+    video_urls = []         # 順序を保持するためのリスト
+    seen_urls = set()       # 重複を検出するためのセット
     wait = WebDriverWait(driver, timeout)
-    scroll_attempts = 0  # 新しい動画が見つからなかった回数
-    max_scroll_attempts = 5  # 最大試行回数を5回に設定
     
-    scroll_origin = ScrollOrigin.from_viewport(0, 0)  # ビューポートの左上を起点とする
-    
-    # ページの初期読み込み待機
-    time.sleep(random.uniform(1, 2))
-    
-    while len(video_urls) < max_items:
+    driver.set_script_timeout(300)
+
+    scroll_attempts = 0       # 新しい動画が読み込まれなかった試行回数
+    max_scroll_attempts = 5  # 最大の試行回数
+
+    while True:
         if stop_flag.is_set():
             logging.info('動画URLの取得が停止されました')
             break
         
-        # 現在のスクロール位置とページの高さを取得
-        last_height = driver.execute_script("return document.body.scrollHeight")
+        prev_height = driver.execute_script("return document.body.scrollHeight")
+        # 5回連続でスクロール
+        for _ in range(10):
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(random.uniform(1.0, 2.0))
         
-        # ページ下部までスクロールするループ
-        while True:
-            # マウスのスクロール動作をシミュレートして下にスクロール
-            ActionChains(driver).scroll_from_origin(scroll_origin, 0, 2000).perform()
-            time.sleep(random.uniform(0.2, 0.5))  # スクロール後の待機時間を短縮
-
-            new_height = driver.execute_script("return window.pageYOffset + window.innerHeight")
-            total_height = driver.execute_script("return document.body.scrollHeight")
-
-            # ページ下部に到達したかチェック
-            if abs(new_height - total_height) < 5:
-                logging.info('ページ下部に到達しました')
-                time.sleep(random.uniform(2, 3))  # 2～3秒待機
-
-            break
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == prev_height:
+            scroll_attempts += 1
+            logging.info(f'新しい投稿が見つからない試行回数: {scroll_attempts}/{max_scroll_attempts}')
+            if scroll_attempts >= max_scroll_attempts:
+                logging.info('これ以上新規投稿が読み込まれないため、スクロール終了')
+                break
+        else:
+            scroll_attempts = 0  # 新規投稿が検出されたので失敗回数をリセット
 
         try:
-            video_elements = wait.until(
-                EC.presence_of_all_elements_located(
-                    (By.XPATH, '//*[@data-e2e="music-item-list"]//a[contains(@href, "/video/") or contains(@href, "/photo/")]')
-                )
-            )
-            
-            previous_count = len(video_urls)  # 現在の動画URL数を保存
-            
-            for element in video_elements:
-                video_url = element.get_attribute('href')
-                if video_url and video_url not in seen_urls:
-                    video_urls.append(video_url)
-                    seen_urls.add(video_url)
-            
-            logging.info(f'取得動画URL数: {len(video_urls)}/{max_items}')
-            
-            if previous_count == len(video_urls):
-                # 新しい動画が見つからなかった場合
-                scroll_attempts += 1
-                logging.info(f'新しい動画が見つからない試行回数: {scroll_attempts}')
-                if scroll_attempts >= max_scroll_attempts:
-                    logging.info('新しい動画が見つからなくなったため終了します。')
-                    break
-                else:
-                    logging.info('上にスクロールして再試行します。')
-                    # 上にスクロール
-                    ActionChains(driver).scroll_from_origin(scroll_origin, 0, -2000).perform()
-                    time.sleep(random.uniform(0.2, 0.5))  # スクロール後の待機時間を短縮
-            else:
-                # 新しい動画が見つかった場合、カウントをリセット
-                scroll_attempts = 0
+            # JavaScriptでhref属性を一括取得（Setで重複除外）
+            all_urls = driver.execute_script("""
+                const urls = Array.from(document.querySelectorAll(
+                    '[data-e2e="music-item-list"] a[href*="/video/"], [data-e2e="music-item-list"] a[href*="/photo/"]'
+                )).map(a => a.href);
+                return Array.from(new Set(urls));
+            """)
+        except (TimeoutException, Exception) as e:
+            logging.warning(f'JavaScript実行時にエラーが発生しました: {e}')
+            continue
 
-            if len(video_urls) >= max_items:
-                break
-
-        except TimeoutException:
-            logging.warning('動画要素がロードされませんでした。')
+        new_urls = [url for url in all_urls if url and url not in seen_urls]
+        video_urls.extend(new_urls)
+        seen_urls.update(new_urls)
+        
+        # 現在の取得件数をログに出力
+        logging.info(f'現在の取得件数: {len(video_urls)}')
+            
+        if max_items and len(video_urls) >= max_items:
             break
-    
+
     logging.info('最終取得動画URL件数: {}'.format(len(video_urls)))
     return video_urls
 
@@ -478,6 +458,8 @@ def write_update_dates(sheet):
     for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, min_col=12, max_col=12):
         for cell in row:
             cell.value = today_str
+
+prefer_account_name_alt = True
 
 def function2(save_path, song_urls, headless=False):
     logging.info('#機能2 処理実行開始')
@@ -551,9 +533,58 @@ def function2(save_path, song_urls, headless=False):
 
             driver.switch_to.window(original_window)
             driver.get(link)
+            driver.execute_script("document.body.style.zoom='90%'")
             time.sleep(random.uniform(1, 2))
 
+            try:
+                # エラーメッセージの要素が存在するかチェック（待機時間を0.5秒に設定）
+                error_element = WebDriverWait(driver, 0.5).until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, '//p[contains(text(), "ページを表示できません")]')
+
+                    )
+                )
+                if error_element:
+
+                    logging.info(f'エラーページが表示されました。ページを再読み込みします。')
+                    driver.refresh()
+                    time.sleep(random.uniform(1, 2))
+                else:
+                    # エラーメッセージが見つからない場合は正常にページが表示されている
+                    pass
+            except TimeoutException:
+                # エラーメッセージが見つからない場合は正常にページが表示されている
+                pass
+
+            try:
+                # エラーメッセージの要素が存在するかチェック（待機時間を0.5秒に設定）
+                error_element = WebDriverWait(driver, 0.5).until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, '//p[contains(text(), "動画は現在ご利用できません")]')
+                    )
+                )
+                if error_element:
+                    logging.info('動画が利用できないため、次の動画に進みます。')
+                    continue
+            except TimeoutException:
+                # エラーメッセージが見つからない場合は正常にページが表示されている
+                pass
+
+            try:
+                # エラーメッセージの要素が存在するかチェック（待機時間を0.5秒に設定）
+                error_element = WebDriverWait(driver, 0.5).until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, '//p[contains(text(), "このアカウントは非公開です")]')
+                    )
+                )
+                if error_element:
+                    logging.info('動画が利用できないため、次の動画に進みます。')
+                    continue
+            except TimeoutException:
+                # エラーメッセージが見つからない場合は正常にページが表示されている
+                pass
             data = extract_video_data(driver, original_window, follower_window_handle)
+
             write_video_data_to_row(sheet, row, data)
 
             # アイコン処理
@@ -690,6 +721,59 @@ def write_video_data_to_row(sheet, row, data):
         value = data.get(key)
         row[i].value = value 
 
+def extract_video_stats_from_json(driver):
+    try:
+        # 特定のスクリプト要素からJSONデータを取得
+        script_content = driver.execute_script(
+            "return document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__').innerText;")
+        
+        # JSONデータをパース
+        data = json.loads(script_content)
+        
+        # 統計情報を取得
+        stats = data["__DEFAULT_SCOPE__"]["webapp.video-detail"]["itemInfo"]["itemStruct"]["stats"]
+        digg_count = stats["diggCount"]
+        comment_count = stats["commentCount"]
+        share_count = stats["shareCount"]
+        play_count = stats["playCount"]
+        collect_count = int(stats["collectCount"])
+
+        # フォロワー数とアカウント名を取得
+        author_stats = data["__DEFAULT_SCOPE__"]["webapp.video-detail"]["itemInfo"]["itemStruct"]["authorStats"]
+        follower_count = author_stats["followerCount"]
+
+        author_info = data["__DEFAULT_SCOPE__"]["webapp.video-detail"]["itemInfo"]["itemStruct"]["author"]
+        account_name = author_info["uniqueId"]
+        nickname = author_info["nickname"]
+
+        # ログに取得した値を記録
+        logging.info(f'いいね数: {digg_count}, コメント数: {comment_count}, '
+                     f'シェア数: {share_count}, 再生回数: {play_count}, 保存数: {collect_count}, '
+                     f'フォロワー数: {follower_count}, アカウント名: {account_name}, ニックネーム: {nickname}')
+
+        return {
+            'いいね数': digg_count,
+            'コメント数': comment_count,
+            'シェア数': share_count,
+            '再生回数': play_count,
+            '保存数': collect_count,
+            'フォロワー数': follower_count,
+            'アカウント名': account_name,
+            'ニックネーム': nickname
+        }
+    except Exception as e:
+        logging.error(f'動画統計情報の取得中にエラーが発生しました: {e}')
+        return {
+            'いいね数': '',
+            'コメント数':'',
+            'シェア数':'',
+            '再生回数':'',
+            '保存数':'',
+            'フォロワー数':'',
+            'アカウント名': '',
+            'ニックネーム': ''
+        }
+    
 # 動画のデータを抽出
 def extract_video_data(driver, original_window, follower_window_handle):
     data = {}
@@ -698,115 +782,156 @@ def extract_video_data(driver, original_window, follower_window_handle):
         try:
             post_id = current_url.rstrip('/').split('/')[-1].split('?')[0]
             data['投稿ID'] = post_id
-        except ValueError:
-            data['投稿ID'] = 'NaN'
-        driver.execute_script("window.scrollBy(0, 100);")
+        except Exception as e:
+            logging.error(f'投稿IDの取得中にエラーが発生しました: {e}')
+            data['投稿ID'] = ''
 
-        # アカウント名
-        data['アカウント名'] = extract_text_with_retry(driver, By.XPATH, '//span[@data-e2e="browse-username"]', 'アカウント名')
+        # URLからアカウント名を取得
+        try:
+            url = current_url
+            start_index = url.find('/@') + 2  # '/@' の直後から
+            end_index = url.find('/', start_index)
+            account_name = url[start_index:end_index]
+        except Exception as e:
+            logging.error(f'URLからアカウント名の取得中にエラーが発生しました: {e}')
+            account_name = ''
 
-        # 日付とニックネーム
-        nickname, date_posted = extract_nickname_and_date(driver)
-
+        # 日付とアカウント名
+        date_posted = extract_nickname_and_date(driver)
         # '更新日' を取得
         update_datetime = datetime.now()
-
         # 'date_posted' をパースして指定の形式に変換
         date_posted = parse_date_posted(date_posted, update_datetime)
-
-        data['ニックネーム'] = nickname
+        
         data['投稿日'] = date_posted
 
-        # いいね数、コメント数、保存数、シェア数、再生回数
-        data['いいね数'] = extract_and_parse_number(driver, '//strong[@data-e2e="like-count"]', 'いいね数')
-        data['コメント数'] = extract_and_parse_number(driver, '//strong[@data-e2e="comment-count"]', 'コメント数')
-        data['保存数'] = extract_and_parse_number(driver, '//strong[@data-e2e="undefined-count"]', '保存数')
-        data['シェア数'] = extract_and_parse_number(driver, '//strong[@data-e2e="share-count"]', 'シェア数')
-        if data['シェア数'] == None:
-            data['シェア数'] = 0
-        data['再生回数'] = extract_and_parse_number(driver, '//*[@id="main-content-video_detail"]/div/div[2]/div/div[1]/div[1]/div[2]/div[1]/div/div/div[2]/p', '再生回数')
+        # '更新日' を取得
+        data['更新日'] = datetime.today().strftime('%Y/%m/%d %H:%M')
 
-        # フォロワー数を非同期タスクとして実行
-        with ThreadPoolExecutor() as executor:
-            future = executor.submit(get_follower_count, driver, original_window, follower_window_handle)
-            data['フォロワー数'] = future.result()
+        if '/video/' in current_url:
+            # JSONから統計情報を取得してデータに追加
+            video_stats = extract_video_stats_from_json(driver)
+            data.update(video_stats)
+        else:
+            # 各データ項目を個別に取得
+            data['アカウント名'] = account_name
+            data['いいね数'] = extract_and_parse_number(driver, '//strong[@data-e2e="like-count"]', 'いいね数')
+            data['コメント数'] = extract_and_parse_number(driver, '//strong[@data-e2e="comment-count"]', 'コメント数')
+            data['保存数'] = extract_and_parse_number(driver, '//strong[@data-e2e="undefined-count"]', '保存数')
+            data['シェア数'] = extract_and_parse_number(driver, '//strong[@data-e2e="share-count"]', 'シェア数')
+            if data['シェア数'] is None:
+                data['シェア数'] = 0
+            data['再生回数'] = ''
+
+            # フォロワー数とニックネームを取得
+            try:
+                with ThreadPoolExecutor() as executor:
+                    future = executor.submit(get_follower_count, driver, account_name, original_window, follower_window_handle)
+                    follower_count, nickname = future.result()
+                    data['フォロワー数'] = follower_count
+                    data['ニックネーム'] = nickname
+            except Exception as e:
+                logging.error(f'フォロワー数の取得中にエラーが発生しました: {e}')
+                data['フォロワー数'] = ''
+                data['ニックネーム'] = ''
 
         data['動画リンク(URL)'] = current_url
-        data['更新日'] = datetime.today().strftime('%Y/%m/%d %H:%M')
-        img_element = driver.find_element(By.XPATH, '//img[@alt=""]')
-        avatar_url = img_element.get_attribute('src')
-        data['アバターURL'] = avatar_url
+
+        # アバターURLの取得
+        data['アバターURL'] = extract_avatar_url(driver, account_name)
+
     except Exception as e:
         logging.error(f'動画データの抽出中にエラーが発生しました: {e}', exc_info=True)
-        # データが取得できなかった場合は空欄にする
-        data = {key: '' for key in ['投稿ID', '投稿日', 'アカウント名', 'ニックネーム',
-                                    'いいね数', 'コメント数', '保存数', 'シェア数',
-                                    '再生回数', 'フォロワー数', '動画リンク(URL)', '更新日', 'アバターURL']}
+        # 全体でエラーが発生した場合でも、これまで取得したデータを返す
+        pass
+
+    # データが取得できなかった項目を空欄に設定
+    keys = ['投稿ID', '投稿日', 'アカウント名', 'ニックネーム',
+            'いいね数', 'コメント数', '保存数', 'シェア数',
+            '再生回数', 'フォロワー数', '動画リンク(URL)', '更新日', 'アバターURL']
+    for key in keys:
+        if key not in data:
+            data[key] = ''
+
     return data
 
-def handle_photo_page_interference(driver):
-    """写真ページでオーバーレイや干渉を処理する"""
-    try:
-        # 指定された文言が含まれるスパン要素を探し、オーバーレイを閉じる
-        puzzle_element = WebDriverWait(driver, 1).until(
-            EC.presence_of_element_located(
-                (By.XPATH, '//span[contains(text(), "スライダーをドラッグしてパズルを完成させてください") or contains(text(), "パズルのピースを正しい場所にドラッグしてください")]')
-            )
-        )
-        if puzzle_element:
-            logging.info('スライダーをドラッグしてパズルを完成させてください 文言が見つかりました。')
-            try:
-                close_button_element = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, '//button[@id="captcha_close_button"]')))
-            except:
-                pass
-            try:
-                close_button_element = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//svg[contains(@viewBox, '0 0 48 48') and @xmlns='http://www.w3.org/2000/svg']//path[contains(@d, 'M10.19 36.19')]")))
-            except:
-                pass
-            close_button_element.click()
-            logging.info('閉じるボタンをクリックしました。')
-            driver.execute_script("window.scrollBy(0, 100);")
-
-    except:
-        pass
-
 def extract_nickname_and_date(driver):
-    element_text = ''
-    date_text = ''
-
+    global prefer_account_name_alt
     try:
-        # 試行1: 提供された構造に基づく取得
-        element_text = extract_text_with_retry(driver, By.XPATH, '//span[@data-e2e="browser-nickname"]/span[@class="css-1xccqfx-SpanNickName e17fzhrb1"]', 'ニックネーム')
-        date_text = extract_text_with_retry(driver, By.XPATH, '//span[@data-e2e="browser-nickname"]/span[3]', '投稿日')
-    except Exception:
-        pass
+        if prefer_account_name_alt:
+            # <a>タグを優先的に探す
+            try:
+                a_element = WebDriverWait(driver, 2).until(
+                    EC.presence_of_element_located((By.XPATH, '//a[@class="css-qvpt8d-StyledAuthorAnchor e1g2yhv81 link-a11y-focus"]'))
+                )
+                # <a> からアカウント名と投稿日を取得
+                account_name = a_element.find_element(By.XPATH, './h3[@data-e2e="video-author-uniqueid"]').text
+                full_text = a_element.text
+                raw_date = full_text.replace(account_name, '').strip()
+                date_text = raw_date.replace('·\n', '').strip()
+            except TimeoutException:
+                logging.warning('aタグが見つかりませんでした。spanタグを試します。')
+                # フラグを反転して次回試行に備える
+                prefer_account_name_alt = not prefer_account_name_alt
+                return extract_nickname_and_date(driver)
+        else:
+            # <span>タグを優先的に探す
+            try:
+                span_element = WebDriverWait(driver, 2).until(
+                    EC.presence_of_element_located((By.XPATH, '//span[@data-e2e="browser-nickname"]'))
+                )
+                # 追加: css-1kcycbd-SpanOtherInfosクラスがある場合は、テキスト全体から'·'区切りで日付を抽出
+                if "css-1kcycbd-SpanOtherInfos" in span_element.get_attribute("class"):
+                    text_content = span_element.text  # 例: "アバンギャルディ avantgardey · 5-10"
+                    parts = text_content.split("·")
+                    if len(parts) >= 2:
+                        date_text = parts[1].strip()
+                    else:
+                        date_text = ''
+                else:
+                    # 既存の処理: <span> からアカウント名と投稿日を取得
+                    account_name = span_element.find_element(By.XPATH, './span[@class="css-1xccqfx-SpanNickName e17fzhrb1"]').text
+                    date_text = span_element.find_elements(By.XPATH, './span')[2].text
+            except TimeoutException:
+                logging.warning('spanタグが見つかりませんでした。aタグを試します。')
+                # フラグを反転して次回試行に備える
+                raise
+        
+        return date_text
+    except Exception as e:
+        logging.error(f'ニックネームと投稿日, を取得中にエラーが発生しました: {e}')
+        return ''
 
-    if not element_text or not date_text:
-        try:
-            # 試行2: 別のアプローチで確認
-            combined_text = extract_text_with_retry(driver, By.XPATH, '//span[@data-e2e="browser-nickname"]', '日付とニックネーム')
-            if combined_text:
-                split_data = combined_text.split('·')
-                element_text = split_data[0].strip()
-                date_text = split_data[1].strip() if len(split_data) > 1 else ''
-        except Exception:
-            pass
+def extract_avatar_url(driver, account_name):
+    global prefer_account_name_alt
+    try:
+        if prefer_account_name_alt:
+            # アカウント名がaltにあるimg要素を優先して使用
+            img_element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, f'//img[@alt="{account_name}"]'))
+            )
+        else:
+            # altが空のimg要素を優先して使用
+            img_element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, '//a[@data-e2e="browse-user-avatar"]//img[@alt=""]'))
+            )
 
-    if not element_text or not date_text:
-        try:
-            # 試行3: 例外的な構造に対応
-            element_text = extract_text_with_retry(driver, By.XPATH, '//span[@data-e2e="browser-nickname"]/span[@class="css-1xccqfx-SpanNickName e17fzhrb1"]', 'ニックネーム') or element_text
-            date_text = extract_text_with_retry(driver, By.XPATH, '//span[@data-e2e="browser-nickname"]/span[contains(text(), "時間前")]', '投稿日') or date_text
-        except Exception:
-            pass
-
-    if not element_text or not date_text:
-        logging.error('ニックネームと日付の取得中にエラーが発生しました')
-
-    return element_text, date_text
-
+        avatar_url = img_element.get_attribute('src')
+        return avatar_url
+    
+    except TimeoutException:
+        logging.warning(f'フラグ {prefer_account_name_alt} に基づいた要素が見つかりませんでした。')
+        # フラグがTrueなら反転して再試行、すでにFalseなら空文字を返す
+        if prefer_account_name_alt:
+            prefer_account_name_alt = False
+            return extract_avatar_url(driver, account_name)
+        else:
+            logging.info("両方の方法で要素が見つからなかったため、空文字を返します。")
+            return ''
+    except Exception as e:
+        logging.error(f'アバターURLの取得中にエラーが発生しました: {e}')
+        return ''
+      
 def extract_text_with_retry(driver, by, value, description):
     """指定された要素からテキストを効率的に取得するための関数。要素の視認性は不要。"""
     locator = (by, value)
@@ -855,26 +980,31 @@ def parse_number(text):
     except ValueError:
         return None
 
-def get_follower_count(driver, original_window, follower_window_handle):
+def get_follower_count(driver, account_name, original_window, follower_window_handle):
     follower_count = ''
+    nickname = ''
     try:
-        account_url_element = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, '//a[@data-e2e="browse-user-avatar"]'))
-        )
-        account_url = account_url_element.get_attribute('href')
+        # アカウントページに移動
+        account_url = f'https://www.tiktok.com/@{account_name}'
         driver.switch_to.window(follower_window_handle)
         driver.get(account_url)
-        try:
-            followers_element = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, '//strong[@data-e2e="followers-count"]'))
-            )
-            follower_count = parse_number(followers_element.text)
-        except (NoSuchElementException, TimeoutException):
-            follower_count = ''
+        time.sleep(random.uniform(1, 2))
+        
+        # アカウント名を取得
+        nickname = extract_text_with_retry(driver, By.XPATH, '//h2[@data-e2e="user-subtitle"]', 'ニックネーム')
+
+        # フォロワー数を取得
+        followers_element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//strong[@data-e2e="followers-count"]'))
+        )
+        follower_count = parse_number(followers_element.text)
+
+        # 元のウィンドウに戻る
         driver.switch_to.window(original_window)
     except Exception as e:
-        logging.error(f'フォロワー数の取得中にエラーが発生しました: {e}')
-    return follower_count
+        logging.error(f'フォロワー数またはアカウント名の取得中にエラーが発生しました: {e}')
+
+    return follower_count, nickname
 
 def login_authentication():
     driver = init_driver(headless=False)
@@ -911,125 +1041,6 @@ def stop_processing():
     stop_all_operations()
     logging.info('処理が停止されました。')
     messagebox.showinfo('停止', '全ての処理が停止されました。')
-
-# def schedule_task(entry_widget, next_run_var):
-#     """指定した時間になったらrun_both_functionsを実行するスケジューラ関数"""
-#     last_run_date = None  # 最後に実行された日時を保存する変数
-
-#     while True:
-#         now = datetime.now()
-
-#         target_time_str = entry_widget.get()
-#         try:
-#             target_time = datetime.strptime(target_time_str, '%H:%M').time()
-#             target_datetime = datetime.combine(now.date(), target_time)
-
-#             if last_run_date is None:
-#                 # 初回実行: 現在の時間が初回セット日時を超えた場合に実行
-#                 if now > target_datetime:
-#                     logging.info('初回起動を開始します。指定時間に達しました。')
-#                     perform_scheduled_task()
-#                     last_run_date = now
-#                     update_next_run_time_label(next_run_var, target_time)
-#             else:
-#                 # 2回目以降: 処理完了日時が前回の実行を超えた場合に実行
-#                 if now > target_datetime and now.date() != last_run_date.date():
-#                     logging.info('再起動を開始します。次回実行時間に達しました。')
-#                     perform_scheduled_task()
-#                     last_run_date = now
-#                     update_next_run_time_label(next_run_var, target_time)
-
-#         except ValueError:
-#             logging.error('入力された時刻の形式が不正です (HH:MM 形式で入力してください)')
-#             break
-
-        # time.sleep(60)
-
-
-def update_next_run_time_label(next_run_var, next_run_time):
-    """次回の実行時間をラベルに表示する"""
-    next_run_var.set(f'次回起動日時: {next_run_time.strftime("%Y-%m-%d %H:%M")}')
-
-def calculate_next_run_time(target_time):
-    """次回実行時間を計算する関数"""
-    jst = pytz.timezone('Asia/Tokyo')  # JSTタイムゾーンを指定
-    now = datetime.now(jst)  # 現在のJST時刻を取得
-    target_datetime_today = datetime.combine(now.date(), target_time)
-    target_datetime_today = jst.localize(target_datetime_today)  # target_datetime_todayをJSTでローカライズ
-
-    return target_datetime_today + timedelta(days=1) if now >= target_datetime_today else target_datetime_today
-
-def perform_scheduled_task(entry_widget, next_run_var):
-    """時間になったらrun_both_functionsを実行"""
-    save_path, max_items, song_urls = read_initial_settings()
-    if save_path and song_urls:
-        headless = False  # タスクスケジューラの場合、ヘッドレスモードが適切
-        function1(save_path, max_items, song_urls, headless=headless)
-        function2(save_path, song_urls, headless=headless)
-        logging.info('スケジュールされた自動起動が完了しました。')
-        # 次回実行日時を更新
-        target_time = datetime.strptime(entry_widget.get(), '%H:%M').time()
-        next_run_time = calculate_next_run_time(target_time)
-        update_next_run_time_label(next_run_var, next_run_time)
-
-def schedule_task(entry_widget, next_run_var):
-    """指定した時間になったらrun_both_functionsを実行するスケジューラ関数"""
-    jst = pytz.timezone('Asia/Tokyo')
-    last_run_date = datetime.today().date()  # 初期化を現在の日付に設定
-
-    while True:
-        now = datetime.now(jst)
-        target_time_str = entry_widget.get()
-        try:
-            target_time = datetime.strptime(target_time_str, '%H:%M').time()
-            target_datetime = datetime.combine(now.date(), target_time)
-            target_datetime = jst.localize(target_datetime)
-
-            # 設定日時のみで確認、初日の実行を避けるためにlast_run_dateでチェック
-            if now >= target_datetime and now.date() > last_run_date:
-                # 設定日時に到達した場合に実行
-                perform_scheduled_task(entry_widget, next_run_var)
-                # 次回実行日時を次の日に設定
-                last_run_date = now.date()
-                next_run_time = target_datetime + timedelta(days=1)
-                update_next_run_time_label(next_run_var, next_run_time)
-
-        except ValueError:
-            logging.error('入力された時刻の形式が不正です (HH:MM 形式で入力してください)')
-            break
-
-        time.sleep(60)
-        
-def schedule_run():
-    """指定時刻が入力されたときに次回実行日時を計算し表示する"""
-    target_time_str = time_entry.get()
-    try:
-        target_time = datetime.strptime(target_time_str, '%H:%M').time()
-        next_run_time = calculate_next_run_time(target_time)
-        update_next_run_time_label(next_run_time_var, next_run_time)
-        threading.Thread(target=schedule_task, args=(time_entry, next_run_time_var)).start()
-    except ValueError:
-        messagebox.showerror('エラー', '時刻の形式が不正です。HH:MM 形式で入力してください。')
-
-def save_schedule_time(time_str):
-    with open('config.json', 'w') as config_file:
-        json.dump({'target_time': time_str}, config_file)
-
-def load_schedule_time():
-    try:
-        with open('config.json', 'r') as config_file:
-            config = json.load(config_file)
-            return config.get('target_time', '')
-    except FileNotFoundError:
-        return ''
-
-def clear_schedule():
-    """スケジュールを取り消して設定をクリアします"""
-    if os.path.exists('config.json'):
-        os.remove('config.json')
-    next_run_time_var.set('')  # 次回実行時間表示をクリア
-    time_entry.delete(0, tk.END)  # エントリーをクリア
-    messagebox.showinfo('スケジュール取消', 'スケジュールが正常に取り消されました。')
 
 def create_gui():
     global time_entry
@@ -1069,20 +1080,6 @@ def create_gui():
     def start_login_authentication():
         threading.Thread(target=login_authentication).start()
 
-    def schedule_run():
-        target_time_str = time_entry.get()
-        try:
-            target_time = datetime.strptime(target_time_str, '%H:%M').time()
-            next_run_time = calculate_next_run_time(target_time)
-            update_next_run_time_label(next_run_time_var, next_run_time)
-            save_schedule_time(target_time_str)  # 保存
-            threading.Thread(target=schedule_task, args=(time_entry, next_run_time_var)).start()
-        except ValueError:
-            messagebox.showerror('エラー', '時刻の形式が不正です。HH:MM 形式で入力してください。')
-
-    def cancel_schedule():
-        clear_schedule()
-
     root = tk.Tk()
     root.title('TikTokデータ取得ツール')
     root.geometry('800x600')
@@ -1120,20 +1117,6 @@ def create_gui():
 
     log_text = scrolledtext.ScrolledText(log_frame, state='disabled')
     log_text.pack(fill=tk.BOTH, expand=True)
-
-    time_entry_label = tk.Label(button_frame, text='毎日実行する時刻 (HH:MM):')
-    time_entry_label.grid(row=1, column=0, padx=5, pady=5)
-
-    schedule_time = load_schedule_time()
-    time_entry = tk.Entry(button_frame, width=10)
-    time_entry.insert(0, schedule_time)
-    time_entry.grid(row=1, column=1, padx=5, pady=5)
-
-    schedule_button = tk.Button(button_frame, text='時指定刻に実行', command=schedule_run)
-    schedule_button.grid(row=1, column=2, padx=5, pady=5)
-
-    cancel_button = tk.Button(button_frame, text='スケジュール取消', command=cancel_schedule)
-    cancel_button.grid(row=1, column=3, padx=5, pady=5)
 
     next_run_time_var = tk.StringVar()
     next_run_time_label = tk.Label(button_frame, textvariable=next_run_time_var)
