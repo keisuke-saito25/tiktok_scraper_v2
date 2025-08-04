@@ -796,8 +796,8 @@ def extract_video_data(driver, original_window, follower_window_handle):
             logging.error(f'URLからアカウント名の取得中にエラーが発生しました: {e}')
             account_name = ''
 
-        # 日付とアカウント名
-        date_posted = extract_nickname_and_date(driver)
+        # 投稿日
+        date_posted = extract_date(driver)
         # '更新日' を取得
         update_datetime = datetime.now()
         # 'date_posted' をパースして指定の形式に変換
@@ -937,7 +937,7 @@ def extract_date_from_json_data(driver):
         logging.warning(f'json_dataで日付取得失敗: {e}')
         return None
 
-def extract_nickname_and_date(driver):
+def extract_date(driver):
     """マルチパターン抽出アプローチで投稿日を取得"""
     logging.info('投稿日の抽出を開始します')
     
