@@ -862,7 +862,7 @@ def extract_date_from_span_pattern1(driver):
             EC.presence_of_element_located((By.XPATH, '//span[@data-e2e="browser-nickname"]'))
         )
         # 既存の処理: <span> からアカウント名と投稿日を取得
-        account_name = span_element.find_element(By.XPATH, './span[@class="css-1xccqfx-SpanNickName e17fzhrb1"]').text
+        span_elements = span_element.find_elements(By.XPATH, './span')
         span_elements = span_element.find_elements(By.XPATH, './span')
         if len(span_elements) >= 3:
             date_text = span_elements[2].text
