@@ -915,7 +915,7 @@ def extract_date_from_json_data(driver):
         if create_time:
             # 現在時刻との差を計算して相対日付を生成
             current_time = time.time()
-            time_diff_days = int((current_time - create_time) / 86400)  # 秒を日に変換
+            time_diff_days = int((current_time - create_time) / (24 * 60 * 60))  # 秒を日に変換
             
             if time_diff_days == 0:
                 date_text = "今日"
