@@ -861,8 +861,7 @@ def extract_date_from_span_pattern1(driver):
         span_element = WebDriverWait(driver, 3).until(
             EC.presence_of_element_located((By.XPATH, '//span[@data-e2e="browser-nickname"]'))
         )
-        # 既存の処理: <span> からアカウント名と投稿日を取得
-        span_elements = span_element.find_elements(By.XPATH, './span')
+        # 既存の処理: <span> から投稿日を取得
         span_elements = span_element.find_elements(By.XPATH, './span')
         if len(span_elements) >= 3:
             date_text = span_elements[2].text
@@ -878,7 +877,7 @@ def extract_date_from_span_pattern1(driver):
 def extract_date_from_span_pattern2(driver):
     """SpanOtherInfosクラスからの日付抽出"""
     try:
-        # css-1kcycbd-SpanOtherInfosクラスを含む要素を検索
+        # SpanOtherInfosクラスを含む要素を検索（css-1kcycbd-SpanOtherInfosを取得したい）
         other_info_elements = WebDriverWait(driver, 3).until(
             EC.presence_of_all_elements_located((By.XPATH, '//span[contains(@class, "SpanOtherInfos")]'))
         )
