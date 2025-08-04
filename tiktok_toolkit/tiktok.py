@@ -909,7 +909,7 @@ def extract_date_from_json_data(driver):
         data = json.loads(script_content)
         
         # createTimeタイムスタンプを取得
-        create_time = data["__DEFAULT_SCOPE__"]["webapp.video-detail"]["itemInfo"]["itemStruct"]["createTime"]
+        create_time = data.get("__DEFAULT_SCOPE__", {}).get("webapp.video-detail", {}).get("itemInfo", {}).get("itemStruct", {}).get("createTime")
         
         # Unixタイムスタンプから日付に変換
         if create_time:
