@@ -913,20 +913,12 @@ def extract_date_from_json_data(driver):
         
         # Unixタイムスタンプから日付に変換
         if create_time:
-            # 現在時刻との差を計算して相対日付を生成
-            current_time = time.time()
-            time_diff_days = int((current_time - create_time) / (24 * 60 * 60))  # 秒を日に変換
+            # JST timezone設定
+            jst = pytz.timezone('Asia/Tokyo')
             
-            if time_diff_days == 0:
-                date_text = "今日"
-            elif time_diff_days == 1:
-                date_text = "昨日"
-            elif time_diff_days < 30:
-                date_text = f"{time_diff_days}日前"
-            else:
-                # 30日以上前の場合は月-日形式で表示
-                post_date = datetime.fromtimestamp(create_time)
-                date_text = f"{post_date.month}-{post_date.day}"
+            # Unixタイムスタンプから日付に変換（JSTで）
+            post_date = datetime.fromtimestamp(create_time, tz=jst)
+            date_text = f"{post_date.month:02d}/{post_date.day:02d}"
             
             logging.info(f'json_dataで日付取得成功: {date_text}')
             return date_text
