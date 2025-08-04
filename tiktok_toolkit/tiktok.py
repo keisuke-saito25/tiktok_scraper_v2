@@ -855,52 +855,111 @@ def extract_video_data(driver, original_window, follower_window_handle):
 
     return data
 
-def extract_nickname_and_date(driver):
-    global prefer_account_name_alt
+def extract_date_from_span_pattern1(driver):
+    """基本的なspan要素からの日付抽出"""
     try:
-        if prefer_account_name_alt:
-            # <a>タグを優先的に探す
-            try:
-                a_element = WebDriverWait(driver, 2).until(
-                    EC.presence_of_element_located((By.XPATH, '//a[@class="css-qvpt8d-StyledAuthorAnchor e1g2yhv81 link-a11y-focus"]'))
-                )
-                # <a> からアカウント名と投稿日を取得
-                account_name = a_element.find_element(By.XPATH, './h3[@data-e2e="video-author-uniqueid"]').text
-                full_text = a_element.text
-                raw_date = full_text.replace(account_name, '').strip()
-                date_text = raw_date.replace('·\n', '').strip()
-            except TimeoutException:
-                logging.warning('aタグが見つかりませんでした。spanタグを試します。')
-                # フラグを反転して次回試行に備える
-                prefer_account_name_alt = not prefer_account_name_alt
-                return extract_nickname_and_date(driver)
+        span_element = WebDriverWait(driver, 3).until(
+            EC.presence_of_element_located((By.XPATH, '//span[@data-e2e="browser-nickname"]'))
+        )
+        # 既存の処理: <span> からアカウント名と投稿日を取得
+        account_name = span_element.find_element(By.XPATH, './span[@class="css-1xccqfx-SpanNickName e17fzhrb1"]').text
+        span_elements = span_element.find_elements(By.XPATH, './span')
+        if len(span_elements) >= 3:
+            date_text = span_elements[2].text
+            logging.info(f'span_pattern1で日付取得成功: {date_text}')
+            return date_text
         else:
-            # <span>タグを優先的に探す
-            try:
-                span_element = WebDriverWait(driver, 2).until(
-                    EC.presence_of_element_located((By.XPATH, '//span[@data-e2e="browser-nickname"]'))
-                )
-                # 追加: css-1kcycbd-SpanOtherInfosクラスがある場合は、テキスト全体から'·'区切りで日付を抽出
-                if "css-1kcycbd-SpanOtherInfos" in span_element.get_attribute("class"):
-                    text_content = span_element.text  # 例: "アバンギャルディ avantgardey · 5-10"
-                    parts = text_content.split("·")
-                    if len(parts) >= 2:
-                        date_text = parts[1].strip()
-                    else:
-                        date_text = ''
-                else:
-                    # 既存の処理: <span> からアカウント名と投稿日を取得
-                    account_name = span_element.find_element(By.XPATH, './span[@class="css-1xccqfx-SpanNickName e17fzhrb1"]').text
-                    date_text = span_element.find_elements(By.XPATH, './span')[2].text
-            except TimeoutException:
-                logging.warning('spanタグが見つかりませんでした。aタグを試します。')
-                # フラグを反転して次回試行に備える
-                raise
-        
-        return date_text
+            logging.warning('span_pattern1: 十分なspan要素が見つかりませんでした')
+            return None
     except Exception as e:
-        logging.error(f'ニックネームと投稿日, を取得中にエラーが発生しました: {e}')
-        return ''
+        logging.warning(f'span_pattern1で日付取得失敗: {e}')
+        return None
+
+def extract_date_from_span_pattern2(driver):
+    """SpanOtherInfosクラスからの日付抽出"""
+    try:
+        # css-1kcycbd-SpanOtherInfosクラスを含む要素を検索
+        other_info_elements = WebDriverWait(driver, 3).until(
+            EC.presence_of_all_elements_located((By.XPATH, '//span[contains(@class, "SpanOtherInfos")]'))
+        )
+        
+        for element in other_info_elements:
+            text_content = element.text  # 例: "박보성 · 7-8"
+            if "·" in text_content:
+                parts = text_content.split("·")
+                if len(parts) >= 2:
+                    date_text = parts[1].strip()
+                    logging.info(f'span_pattern2で日付取得成功: {date_text}')
+                    return date_text
+        
+        logging.warning('span_pattern2: 適切なテキスト形式が見つかりませんでした')
+        return None
+    except Exception as e:
+        logging.warning(f'span_pattern2で日付取得失敗: {e}')
+        return None
+
+def extract_date_from_json_data(driver):
+    """JSONデータからの投稿日抽出"""
+    try:
+        # 特定のスクリプト要素からJSONデータを取得
+        script_content = driver.execute_script(
+            "return document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__').innerText;")
+        
+        # JSONデータをパース
+        data = json.loads(script_content)
+        
+        # createTimeタイムスタンプを取得
+        create_time = data["__DEFAULT_SCOPE__"]["webapp.video-detail"]["itemInfo"]["itemStruct"]["createTime"]
+        
+        # Unixタイムスタンプから日付に変換
+        if create_time:
+            # 現在時刻との差を計算して相対日付を生成
+            current_time = time.time()
+            time_diff_days = int((current_time - create_time) / 86400)  # 秒を日に変換
+            
+            if time_diff_days == 0:
+                date_text = "今日"
+            elif time_diff_days == 1:
+                date_text = "昨日"
+            elif time_diff_days < 30:
+                date_text = f"{time_diff_days}日前"
+            else:
+                # 30日以上前の場合は月-日形式で表示
+                post_date = datetime.fromtimestamp(create_time)
+                date_text = f"{post_date.month}-{post_date.day}"
+            
+            logging.info(f'json_dataで日付取得成功: {date_text}')
+            return date_text
+        
+        logging.warning('json_data: createTimeが見つかりませんでした')
+        return None
+    except Exception as e:
+        logging.warning(f'json_dataで日付取得失敗: {e}')
+        return None
+
+def extract_nickname_and_date(driver):
+    """マルチパターン抽出アプローチで投稿日を取得"""
+    logging.info('投稿日の抽出を開始します')
+    
+    # 3つのパターンを順次試行
+    extraction_patterns = [
+        extract_date_from_span_pattern1,  # 基本的なspan検索
+        extract_date_from_span_pattern2,  # SpanOtherInfos直接検索
+        extract_date_from_json_data,      # JSONデータからの抽出
+    ]
+    
+    for i, pattern_func in enumerate(extraction_patterns, 1):
+        try:
+            result = pattern_func(driver)
+            if result:
+                logging.info(f'パターン{i}で投稿日取得成功: {result}')
+                return result
+        except Exception as e:
+            logging.warning(f'パターン{i}でエラー: {e}')
+            continue
+    
+    logging.error('全ての抽出パターンで投稿日取得に失敗しました')
+    return ''
 
 def extract_avatar_url(driver, account_name):
     global prefer_account_name_alt
