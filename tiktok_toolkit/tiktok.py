@@ -917,7 +917,7 @@ def extract_date_from_json_data(driver):
             
             # Unixタイムスタンプから日付に変換（JSTで）
             post_date = datetime.fromtimestamp(create_time, tz=jst)
-            date_text = f"{post_date.month:02d}/{post_date.day:02d}"
+            date_text = f"{post_date.year}/{post_date.month:02d}/{post_date.day:02d}"
             
             logging.info(f'json_dataで日付取得成功: {date_text}')
             return date_text
