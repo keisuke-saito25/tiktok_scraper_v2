@@ -160,6 +160,7 @@ def init_driver(headless=False, for_function1=False):
     chrome_options.add_argument(f'--profile-directory={profile_directory}')
     try:
         service = Service(ChromeDriverManager().install())
+        # service = Service(ChromeDriverManager(cache_valid_range=0).install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.set_window_size(1420, 1080)  
         driver.execute_script("document.body.style.zoom='{}'".format(0.8 * 100))
@@ -674,45 +675,64 @@ def function2(save_path, song_urls, headless=False):
     driver.quit()
     logging.info('#機能2 処理実行停止')
 def parse_date_posted(date_posted_str, update_datetime):
-    date_posted_str = date_posted_str.strip()
+    """
+    画面テキストの投稿日を 'yyyy/mm/dd' に統一して返す。
+    変換できない場合は元の文字列を返す（空にはしない）。
+    """
+    s0 = (date_posted_str or '').strip()
+    if not s0:
+        return ''
 
-    # 'n日前' の形式
-    m = re.match(r'(\d+)日前', date_posted_str)
+    # 空白除去 + 全角数字→半角
+    s = re.sub(r'\s+', '', s0)
+    s = s.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+
+    # --- 1) 相対表現は先に判定（ここでは「日」を削らない） ---
+    if s in ('今日', 'きょう', 'today'):
+        return update_datetime.strftime('%Y/%m/%d')
+    if s in ('昨日', 'きのう', 'yesterday'):
+        return (update_datetime - timedelta(days=1)).strftime('%Y/%m/%d')
+
+    m = re.match(r'^(\d+)分前$', s)
     if m:
-        days_ago = int(m.group(1))
-        date_posted = update_datetime - timedelta(days=days_ago)
-        return date_posted.strftime('%m/%d')
+        return update_datetime.strftime('%Y/%m/%d')
 
-    # 'n時間前' の形式
-    m = re.match(r'(\d+)時間前', date_posted_str)
+    m = re.match(r'^(\d+)時間前$', s)
     if m:
-        hours_ago = int(m.group(1))
-        date_posted = update_datetime - timedelta(hours=hours_ago)
-        return date_posted.strftime('%m/%d')
+        d = update_datetime - timedelta(hours=int(m.group(1)))
+        return d.strftime('%Y/%m/%d')
 
-    # 'n週間前' の形式
-    m = re.match(r'(\d+)週間前', date_posted_str)
+    m = re.match(r'^(\d+)日前$', s)
     if m:
-        weeks_ago = int(m.group(1))
-        date_posted = update_datetime - timedelta(weeks=weeks_ago)
-        return date_posted.strftime('%m/%d')
+        d = update_datetime - timedelta(days=int(m.group(1)))
+        return d.strftime('%Y/%m/%d')
 
-    # 'mm-dd' の形式
-    m = re.match(r'(\d{1,2})-(\d{1,2})', date_posted_str)
+    m = re.match(r'^(\d+)週間前$', s)
     if m:
-        month = int(m.group(1))
-        day = int(m.group(2))
-        return f'{month:02}/{day:02}'
+        d = update_datetime - timedelta(weeks=int(m.group(1)))
+        return d.strftime('%Y/%m/%d')
 
-    # 'yyyy-mm-dd' の形式
-    m = re.match(r'(\d{4})-(\d{1,2})-(\d{1,2})', date_posted_str)
+    # --- 2) 絶対日付の正規化（区切りや「年/月/日」を処理） ---
+    s_abs = (s.replace('－', '-').replace('—', '-').replace('–', '-')
+               .replace('／', '/').replace('-', '/').replace('.', '/'))
+    s_abs = (s_abs.replace('年', '/').replace('月', '/').replace('日', ''))
+
+    # yyyy/m/d → yyyy/mm/dd
+    m = re.match(r'^(\d{4})/(\d{1,2})/(\d{1,2})$', s_abs)
     if m:
-        year = int(m.group(1))
-        month = int(m.group(2))
-        day = int(m.group(3))
-        return f'{year}/{month:02}/{day:02}'
+        y, mn, dy = map(int, m.groups())
+        return f'{y:04d}/{mn:02d}/{dy:02d}'
 
-    # その他の形式はそのまま返す
+    # m/d → 当年補完 + 年越し補正 → yyyy/mm/dd
+    m = re.match(r'^(\d{1,2})/(\d{1,2})$', s_abs)
+    if m:
+        mn, dy = map(int, m.groups())
+        y = update_datetime.year
+        if (mn, dy) > (update_datetime.month, update_datetime.day):
+            y -= 1
+        return f'{y:04d}/{mn:02d}/{dy:02d}'
+
+    # 解釈できない場合は元文字を返す（ログは上位で出力方針）
     return date_posted_str
 
 def write_video_data_to_row(sheet, row, data):
@@ -796,14 +816,27 @@ def extract_video_data(driver, original_window, follower_window_handle):
             logging.error(f'URLからアカウント名の取得中にエラーが発生しました: {e}')
             account_name = ''
 
-        # 投稿日
-        date_posted = extract_date(driver)
-        # '更新日' を取得
+        # 投稿日（生テキスト → yyyy/mm/dd に正規化）
+        raw_date_text = (extract_date(driver) or '').strip()
         update_datetime = datetime.now()
-        # 'date_posted' をパースして指定の形式に変換
-        date_posted = parse_date_posted(date_posted, update_datetime)
-        
-        data['投稿日'] = date_posted
+        normalized_date = parse_date_posted(raw_date_text, update_datetime)
+
+        # ログ出力：失敗時のみ
+        if not re.match(r'^\d{4}/\d{2}/\d{2}$', normalized_date):
+            if raw_date_text == '':
+                logging.warning(f'投稿日 取得失敗: raw="" url="{current_url}"')
+            elif normalized_date == raw_date_text:
+                # 変換できず元の文字列を採用（仕様）
+                logging.warning(
+                    f'投稿日 正規化できず（元文字列を保存）: raw="{raw_date_text}" url="{current_url}"'
+                )
+            else:
+                # 変換はしたがフォーマットが想定外
+                logging.warning(
+                    f'投稿日 非標準形式: raw="{raw_date_text}" -> parsed="{normalized_date}" url="{current_url}"'
+                )
+
+        data['投稿日'] = normalized_date
 
         # '更新日' を取得
         data['更新日'] = datetime.today().strftime('%Y/%m/%d %H:%M')
